@@ -134,7 +134,7 @@ impl scrollable::StyleSheet for Theme {
                 border_width: 1.0,
                 border_color: Color::TRANSPARENT,
                 scroller: scrollable::Scroller {
-                    color: Color::TRANSPARENT,
+                    color: UNFOCUS,
                     border_radius: 4.0,
                     border_width: 1.0,
                     border_color: Color::TRANSPARENT,
@@ -151,7 +151,7 @@ impl scrollable::StyleSheet for Theme {
                 border_width: 1.0,
                 border_color: Color::TRANSPARENT,
                 scroller: scrollable::Scroller {
-                    color: Color::TRANSPARENT,
+                    color: FOCUS,
                     border_radius: 4.0,
                     border_width: 1.0,
                     border_color: Color::TRANSPARENT,
@@ -189,31 +189,31 @@ impl pane_grid::StyleSheet for Theme {
     }
 }
 
-const BACKGROUND: Color = Color::from_rgb(
+pub const BACKGROUND: Color = Color::from_rgb(
     0x16 as f32 / 255.0,
     0x1b as f32 / 255.0,
     0x24 as f32 / 255.0,
 );
 
-const TEXT: Color = Color::from_rgb(
+pub const TEXT: Color = Color::from_rgb(
     0xf3 as f32 / 255.0,
     0xf3 as f32 / 255.0,
     0xf3 as f32 / 255.0,
 );
 
-const FOCUS: Color = Color::from_rgb(
+pub const FOCUS: Color = Color::from_rgb(
     0x61 as f32 / 255.0,
     0xa3 as f32 / 255.0,
     0xff as f32 / 255.0,
 );
 
-const UNFOCUS: Color = Color::from_rgb(
+pub const UNFOCUS: Color = Color::from_rgb(
     0x1d as f32 / 255.0,
     0x6a as f32 / 255.0,
     0xd5 as f32 / 255.0,
 );
 
-const WATCHED: Color = Color::from_rgb(
+pub const WATCHED: Color = Color::from_rgb(
     0x27 as f32 / 255.0,
     0x2d as f32 / 255.0,
     0x3a as f32 / 255.0,

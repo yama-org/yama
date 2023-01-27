@@ -1,10 +1,11 @@
 use once_cell::unsync::OnceCell;
-//use rand::Rng;
 use std::{
     env, fs,
     io::{Error, ErrorKind},
     path::{Path, PathBuf},
     process::Command,
+    sync::{mpsc, Arc, Mutex},
+    thread,
 };
 
 pub struct Config {
@@ -17,9 +18,9 @@ impl Config {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Backend {
-    pub titles: Vec<Title>,
+    pub titles: Vec<Arc<Mutex<Title>>>,
     pub count: usize,
     cache: OnceCell<Vec<String>>,
 }
@@ -28,8 +29,8 @@ pub struct Backend {
 pub struct Title {
     pub name: String,
     pub path: PathBuf,
-    pub episodes: Vec<Episode>,
     pub count: usize,
+    episodes: Vec<Episode>,
     cache: OnceCell<Vec<String>>,
 }
 
@@ -51,16 +52,22 @@ pub struct VideoMetadata {
     pub watched: bool,
 }
 
+impl Default for Backend {
+    fn default() -> Self {
+        Backend::new()
+    }
+}
+
 impl Backend {
     pub fn new() -> Self {
-        //Later this will be read from a file
+        //TODO: Read config from a file
         let config = Config::new(PathBuf::from("./series")).unwrap();
         let titles = Self::get_titles(config).unwrap();
 
         Backend {
+            cache: OnceCell::default(),
             count: titles.len(),
             titles,
-            cache: OnceCell::default(),
         }
     }
 
@@ -77,9 +84,7 @@ impl Backend {
     }
 
     pub fn run_mpv(command: &str) -> std::io::Result<std::process::Output> {
-        Backend::run_process(
-            format!("mpv --script=./mpv_scripts/save_info.lua {}", command).as_str(),
-        )
+        Backend::run_process(format!("mpv --script=./mpv_scripts/save_info.lua {command}").as_str())
     }
 
     fn get_files_from_dir(path: &PathBuf) -> std::io::Result<Vec<PathBuf>> {
@@ -92,61 +97,51 @@ impl Backend {
         Ok(files)
     }
 
-    fn get_titles(config: Config) -> std::io::Result<Vec<Title>> {
+    fn get_titles(config: Config) -> std::io::Result<Vec<Arc<Mutex<Title>>>> {
         let mut series: Vec<Title> = Self::get_files_from_dir(&config.series_path)?
             .into_iter()
             .filter(|x| match fs::metadata(x) {
                 Ok(f) => f.is_dir(),
                 Err(_) => false,
             })
-            .map(|path| Title::new(path))
+            .map(Title::new)
             .collect();
-        series.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        Ok(series)
+
+        series.sort_by(|a, b| alphanumeric_sort::compare_str(&a.name, &b.name));
+
+        Ok(series
+            .into_iter()
+            .map(|t| Arc::new(Mutex::new(t)))
+            .collect())
     }
 
     pub fn view(&self) -> &[String] {
-        self.cache
-            .get_or_init(|| self.titles.iter().map(|t| t.name.clone()).collect())
-    }
-
-    pub fn get_episode_ref(&self, title: usize, number: usize) -> &Episode {
-        self.titles
-            .get(title)
-            .unwrap()
-            .episodes
-            .get(number)
-            .unwrap()
-    }
-
-    pub fn get_episode_mut(&mut self, title: usize, number: usize) -> &mut Episode {
-        self.titles
-            .get_mut(title)
-            .unwrap()
-            .episodes
-            .get_mut(number)
-            .unwrap()
-    }
-
-    pub fn get_episode(&self, title: usize, number: usize) -> Episode {
-        self.get_episode_ref(title, number).clone()
+        self.cache.get_or_init(|| {
+            self.titles
+                .iter()
+                .map(|t| {
+                    let t = t.lock().unwrap();
+                    t.name.clone()
+                })
+                .collect()
+        })
     }
 }
 
 impl Title {
     pub fn new(path: PathBuf) -> Self {
-        let episodes = Self::get_episodes(&path).unwrap();
         Title {
             name: path.display().to_string().replace("./series/", ""),
-            count: episodes.len(),
-            episodes,
-            path,
             cache: OnceCell::default(),
+            episodes: Vec::new(),
+            count: 0,
+            path,
         }
     }
 
-    pub fn get_episodes(path: &PathBuf) -> std::io::Result<Vec<Episode>> {
-        const VIDEO_FORMATS: &'static [&'static str] = &[".mp4", ".mkv"];
+    fn get_episodes(path: &PathBuf) -> std::io::Result<Vec<Episode>> {
+        //TODO: Improve video file detection
+        const VIDEO_FORMATS: &[&str] = &[".mp4", ".mkv"];
 
         let mut episodes: Vec<PathBuf> = Backend::get_files_from_dir(path)?
             .into_iter()
@@ -170,15 +165,44 @@ impl Title {
         let episodes = episodes
             .into_iter()
             .enumerate()
-            .map(|(i, path)| Episode::new(path, i + 1).unwrap())
+            .map(|(i, path)| {
+                let (tx, rx) = mpsc::channel();
+
+                thread::spawn(move || {
+                    let ep = Episode::new(path, i + 1).unwrap();
+                    tx.send(ep).unwrap();
+                });
+
+                rx.recv().unwrap()
+            })
             .collect();
 
         Ok(episodes)
     }
 
+    pub fn get_or_init(&mut self, number: usize) -> &mut Episode {
+        if self.episodes.is_empty() {
+            self.episodes = Self::get_episodes(&self.path).unwrap();
+            self.count = self.episodes.len();
+        }
+        &mut self.episodes[number]
+    }
+
     pub fn view(&self) -> &[String] {
         self.cache
             .get_or_init(|| self.episodes.iter().map(|e| e.name.clone()).collect())
+    }
+
+    pub fn get_episode_ref(&self, number: usize) -> &Episode {
+        &self.episodes[number]
+    }
+
+    pub fn get_episode(&self, number: usize) -> Episode {
+        self.episodes[number].clone()
+    }
+
+    pub fn is_loaded(&self) -> bool {
+        self.path.join(".metadata/").is_dir()
     }
 }
 
@@ -192,11 +216,11 @@ impl Episode {
         let md_path = old_md_path
             .parent()
             .unwrap()
-            .join(format!(".metadata/episode_{}/", number))
+            .join(format!(".metadata/episode_{number}/"))
             .join(old_md_path.file_name().unwrap());
 
-        if fs::metadata(&md_path).is_ok() == false {
-            let command = format!("--no-video --end=0.1 \"{}\"", path.display());
+        if fs::metadata(&md_path).is_err() {
+            let command = format!("--no-video --end=0.0001 \"{}\"", path.display());
             Backend::run_mpv(&command)?;
         }
 
@@ -207,16 +231,15 @@ impl Episode {
         let thumbnail_path = path
             .parent()
             .unwrap()
-            .join(format!(".metadata/episode_{}/", number))
+            .join(format!(".metadata/episode_{number}/"))
             .join("thumbnail.jpg");
 
-        if fs::metadata(&thumbnail_path).is_ok() == false {
+        if fs::metadata(&thumbnail_path).is_err() {
             Backend::run_process(
                 format!(
                     "ffmpegthumbnailer -i \"{}\" -o \"{}\" -s 0",
                     path.display(),
                     thumbnail_path.display(),
-                    //rand::thread_rng().gen_range(4..11)
                 )
                 .as_str(),
             )?;
@@ -331,7 +354,7 @@ impl VideoMetadata {
     pub fn to_time(duration: f64) -> String {
         let minutes = (duration / 60.0).trunc();
         let seconds = (((duration / 60.0) - minutes) * 60.0).floor();
-        format!("{:02.0}:{:02.0}", minutes, seconds)
+        format!("{minutes:02.0}:{seconds:02.0}")
     }
 }
 
@@ -343,7 +366,11 @@ mod tests {
     #[test]
     fn series_titles() {
         let backend = Backend::new();
-        let series: Vec<String> = backend.titles.into_iter().map(|t| t.name).collect();
+        let series: Vec<String> = backend
+            .titles
+            .into_iter()
+            .map(|t| t.lock().unwrap().name.clone())
+            .collect();
 
         assert_eq!(
             vec!["Akiba Maid Wars", "Bocchi the Rock", "Girls Last Tour"],
@@ -356,13 +383,15 @@ mod tests {
     fn serie_episodes() {
         let backend = Backend::new();
         let episodes: Vec<String> = backend.titles[0]
+            .lock()
+            .unwrap()
             .episodes
             .clone()
             .into_iter()
             .map(|e| e.name)
             .collect();
 
-        let base_name = &backend.titles[0].name;
+        let base_name = &backend.titles[0].lock().unwrap().name;
         let mut episodes_test: Vec<String> = Vec::new();
 
         for i in 1..4 {
@@ -376,7 +405,7 @@ mod tests {
     #[serial]
     fn open_episode() {
         let backend = Backend::new();
-        let mut episodes: Vec<Episode> = backend.titles[0].episodes.clone();
+        let mut episodes: Vec<Episode> = backend.titles[0].lock().unwrap().episodes.clone();
 
         let command = format!(
             "--start={} --end={} \"{}\"",
@@ -395,7 +424,7 @@ mod tests {
     #[serial]
     fn is_watched() {
         let backend = Backend::new();
-        let mut episodes: Vec<Episode> = backend.titles[0].episodes.clone();
+        let mut episodes: Vec<Episode> = backend.titles[0].lock().unwrap().episodes.clone();
 
         // Running video with mpv
         let command = format!(
@@ -415,7 +444,7 @@ mod tests {
     #[serial]
     fn is_serie_watched() {
         let backend = Backend::new();
-        let mut episodes: Vec<Episode> = backend.titles[1].episodes.clone();
+        let mut episodes: Vec<Episode> = backend.titles[1].lock().unwrap().episodes.clone();
         let mut episodes_watched: Vec<bool> = Vec::new();
 
         for ep in episodes.iter_mut() {

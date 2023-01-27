@@ -7,6 +7,7 @@ use iced::{window, Application, Settings};
 pub fn main() -> iced::Result {
     GUI::run(Settings {
         id: None,
+        antialiasing: true,
         window: window::Settings {
             size: (1920, 1080),
             ..window::Settings::default()

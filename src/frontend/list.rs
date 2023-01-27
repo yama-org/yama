@@ -1,5 +1,4 @@
 use crate::frontend::theme::{self, widget::Element};
-use iced::alignment::Alignment;
 use iced::widget::{button, pane_grid::Direction, text, Column};
 use iced::Length;
 
@@ -67,9 +66,7 @@ impl List {
 
         Column::with_children(arr)
             .width(Length::Fill)
-            .height(Length::Fill)
             .spacing(10)
-            .align_items(Alignment::Start)
             .into()
     }
 }

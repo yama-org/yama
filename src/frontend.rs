@@ -1,9 +1,12 @@
 use crate::backend::{Backend, Episode};
 use iced::widget::pane_grid::{self, Direction, PaneGrid};
-use iced::widget::{column, container, image, scrollable, text};
-use iced::{alignment, executor, keyboard};
+use iced::widget::{canvas, column, container, image, scrollable, text};
+use iced::{alignment, executor, keyboard, window};
 use iced::{Application, Command, Length, Subscription};
 use iced_native::{event, subscription, Event};
+use once_cell::sync::Lazy;
+use std::sync::Arc;
+use std::time::Instant;
 
 mod list;
 use self::list::List;
@@ -12,6 +15,12 @@ mod theme;
 use self::theme::widget::Element;
 use self::theme::Theme;
 
+mod loading;
+use self::loading::LoadingCircle;
+
+static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
+
+#[derive(Debug)]
 enum PaneKind {
     None,
     Titles,
@@ -19,6 +28,22 @@ enum PaneKind {
     Metadata(Episode),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum State {
+    Normal,
+    Loading,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Message {
+    FocusItem(Direction),
+    Loading(Instant),
+    EpisodesLoaded,
+    Enter,
+    Back,
+}
+
+#[derive(Debug)]
 struct Pane {
     kind: PaneKind,
     list: Option<List>,
@@ -27,14 +52,9 @@ struct Pane {
 pub struct GUI {
     panes: pane_grid::State<Pane>,
     focus: Option<pane_grid::Pane>,
+    loading: LoadingCircle,
     backend: Backend,
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    FocusItem(Direction),
-    Enter,
-    Back,
+    state: State,
 }
 
 impl Pane {
@@ -80,6 +100,8 @@ impl Application for GUI {
                 panes,
                 focus,
                 backend,
+                state: State::Normal,
+                loading: LoadingCircle::new(),
             },
             Command::none(),
         )
@@ -90,69 +112,118 @@ impl Application for GUI {
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
-        match message {
-            Message::FocusItem(direction) => {
-                if let Some(pane) = self.focus {
-                    let panel = self.panes.get_mut(&pane).unwrap();
+        match self.state {
+            State::Loading => match message {
+                Message::Loading(instant) => self.loading.update(instant),
+                Message::EpisodesLoaded => {
+                    self.state = State::Normal;
 
-                    if let Some(list) = panel.list.as_mut() {
-                        list.update(direction);
-                    }
+                    if let Some(pane) = self.focus {
+                        let panel = self.panes.get(&pane).unwrap();
+                        let focused = panel.list.as_ref().unwrap().focused;
+                        let title = &mut self.backend.titles[focused].lock().unwrap();
 
-                    match panel.kind {
-                        PaneKind::Episodes(title) => {
-                            let focused = panel.list.as_ref().unwrap().focused;
-
-                            if let Some(adj) = self.panes.adjacent(&pane, Direction::Right) {
-                                *self.panes.get_mut(&adj).unwrap() = Pane::new(
-                                    PaneKind::Metadata(self.backend.get_episode(title, focused)),
-                                    None,
-                                );
-                            }
-                        }
-                        _ => (),
-                    }
-                }
-            }
-            Message::Enter => {
-                if let Some(pane) = self.focus {
-                    let panel = self.panes.get(&pane).unwrap();
-
-                    match panel.kind {
-                        PaneKind::Titles => {
-                            let focused = panel.list.as_ref().unwrap().focused;
-                            let title = &self.backend.titles[focused];
+                        if let Some(adj) = self.panes.adjacent(&pane, Direction::Left) {
                             let episodes_list = List::new(0, title.count);
 
-                            if let Some(adj) = self.panes.adjacent(&pane, Direction::Left) {
-                                *self.panes.get_mut(&adj).unwrap() =
-                                    Pane::new(PaneKind::Episodes(focused), Some(episodes_list));
+                            *self.panes.get_mut(&adj).unwrap() =
+                                Pane::new(PaneKind::Episodes(focused), Some(episodes_list));
 
-                                self.panes.swap(&pane, &adj);
-                                self.focus = Some(adj);
+                            self.panes.swap(&pane, &adj);
+                            self.focus = Some(adj);
+
+                            return Command::perform(async { Direction::Left }, Message::FocusItem);
+                        }
+                    }
+                }
+                _ => (),
+            },
+            State::Normal => match message {
+                Message::FocusItem(direction) => {
+                    if let Some(pane) = self.focus {
+                        let panel = self.panes.get_mut(&pane).unwrap();
+
+                        if let Some(list) = panel.list.as_mut() {
+                            list.update(direction);
+                            let focus = list.focused;
+                            let mut y = (1.0 / list.size as f32) * list.focused as f32;
+
+                            //Fixes top items being cut-out
+                            if y > 0.1 {
+                                y += 1.0 / list.font_size as f32; //Fixes bottom items being cut-out
+                            }
+
+                            if let PaneKind::Episodes(title) = panel.kind {
+                                if let Some(adj) = self.panes.adjacent(&pane, Direction::Right) {
+                                    *self.panes.get_mut(&adj).unwrap() = Pane::new(
+                                        PaneKind::Metadata(
+                                            self.backend.titles[title]
+                                                .lock()
+                                                .unwrap()
+                                                .get_episode(focus),
+                                        ),
+                                        None,
+                                    );
+                                }
+                            }
+
+                            return scrollable::snap_to(
+                                SCROLLABLE_ID.clone(),
+                                scrollable::RelativeOffset { x: 0.0, y },
+                            );
+                        }
+                    }
+                }
+                Message::Enter => {
+                    if let Some(pane) = self.focus {
+                        let panel = self.panes.get(&pane).unwrap();
+
+                        match panel.kind {
+                            PaneKind::Titles => {
+                                let focused = panel.list.as_ref().unwrap().focused;
+                                let mut title = self.backend.titles[focused].lock().unwrap();
+
+                                if title.is_loaded() {
+                                    title.get_or_init(0);
+                                    return Command::perform(async {}, move |_| {
+                                        Message::EpisodesLoaded
+                                    });
+                                } else {
+                                    drop(title); //We release the lock before sending it to the thread
+                                    let title = Arc::clone(&self.backend.titles[focused]); //We remove mut from ref but CHECK
+                                    self.state = State::Loading;
+                                    return Command::perform(
+                                        async move {
+                                            let mut title = title.lock().unwrap();
+                                            title.get_or_init(0);
+                                        },
+                                        move |_| Message::EpisodesLoaded,
+                                    );
+                                }
+                            }
+                            PaneKind::Episodes(title) => {
+                                let number = panel.list.as_ref().unwrap().focused;
+                                self.backend.titles[title]
+                                    .lock()
+                                    .unwrap()
+                                    .get_or_init(number)
+                                    .run()
+                                    .unwrap();
 
                                 return Command::perform(
                                     async { Direction::Left },
                                     Message::FocusItem,
                                 );
                             }
+                            _ => (),
                         }
-                        PaneKind::Episodes(title) => {
-                            let number = panel.list.as_ref().unwrap().focused;
-                            self.backend.get_episode_mut(title, number).run().unwrap();
-
-                            return Command::perform(async { Direction::Left }, Message::FocusItem);
-                        }
-                        _ => (),
                     }
                 }
-            }
-            Message::Back => {
-                if let Some(pane) = self.focus {
-                    let panel = self.panes.get(&pane).unwrap();
+                Message::Back => {
+                    if let Some(pane) = self.focus {
+                        let panel = self.panes.get(&pane).unwrap();
 
-                    match panel.kind {
-                        PaneKind::Episodes(_) => {
+                        if let PaneKind::Episodes(_) = panel.kind {
                             if let Some(adj) = self.panes.adjacent(&pane, Direction::Right) {
                                 *self.panes.get_mut(&adj).unwrap() =
                                     Pane::new(PaneKind::None, None);
@@ -166,29 +237,54 @@ impl Application for GUI {
                                 *panel = Pane::new(PaneKind::None, None);
                             }
                         }
-                        _ => (),
                     }
                 }
-            }
+                Message::EpisodesLoaded => {
+                    if let Some(pane) = self.focus {
+                        let panel = self.panes.get(&pane).unwrap();
+                        let focused = panel.list.as_ref().unwrap().focused;
+                        let title = &mut self.backend.titles[focused].lock().unwrap();
+
+                        if let Some(adj) = self.panes.adjacent(&pane, Direction::Left) {
+                            let episodes_list = List::new(0, title.count);
+
+                            *self.panes.get_mut(&adj).unwrap() =
+                                Pane::new(PaneKind::Episodes(focused), Some(episodes_list));
+
+                            self.panes.swap(&pane, &adj);
+                            self.focus = Some(adj);
+
+                            return Command::perform(async { Direction::Left }, Message::FocusItem);
+                        }
+                    }
+                }
+                _ => (),
+            },
         }
 
         Command::none()
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        subscription::events_with(|event, status| {
-            if let event::Status::Captured = status {
-                return None;
-            }
+        match self.state {
+            //Loading subscription, disables input
+            State::Loading => window::frames().map(Message::Loading),
 
-            match event {
-                Event::Keyboard(keyboard::Event::KeyPressed {
-                    key_code,
-                    modifiers,
-                }) if modifiers.is_empty() => handle_hotkey(key_code),
-                _ => None,
-            }
-        })
+            //Input subscription
+            State::Normal => subscription::events_with(|event, status| {
+                if let event::Status::Captured = status {
+                    return None;
+                }
+
+                match event {
+                    Event::Keyboard(keyboard::Event::KeyPressed {
+                        key_code,
+                        modifiers: _,
+                    }) => handle_hotkey(key_code),
+                    _ => None,
+                }
+            }),
+        }
     }
 
     fn view(&self) -> Element<Message> {
@@ -196,24 +292,21 @@ impl Application for GUI {
 
         let pane_grid = PaneGrid::new(&self.panes, |id, pane, _| {
             let is_focused = focus == Some(id);
-            let content =
-                pane_grid::Content::new(view_content(&pane, &self.backend)).style(if is_focused {
-                    theme::Container::Focused
-                } else {
-                    theme::Container::Unfocused
-                });
+
+            let content = pane_grid::Content::new(view_content(pane, self)).style(if is_focused {
+                theme::Container::Focused
+            } else {
+                theme::Container::Unfocused
+            });
 
             match pane.kind {
                 PaneKind::Titles => {
-                    let title = "Titles";
-                    let title_bar = pane_grid::TitleBar::new(title).padding(10);
-
+                    let title_bar = pane_grid::TitleBar::new("Titles").padding(10);
                     content.title_bar(title_bar)
                 }
-                PaneKind::Episodes(title) => {
-                    let title = self.backend.titles[title].name.as_str();
-                    let title_bar = pane_grid::TitleBar::new(title).padding(10);
-
+                PaneKind::Episodes(_) => {
+                    //let title = self.backend.titles[title].lock().unwrap().name.as_str();
+                    let title_bar = pane_grid::TitleBar::new("Episodes").padding(10);
                     content.title_bar(title_bar)
                 }
                 _ => content,
@@ -254,37 +347,61 @@ fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
     }
 }
 
-fn view_content<'a>(pane: &Pane, backend: &Backend) -> Element<'a, Message> {
+fn view_content<'a>(pane: &Pane, gui: &'a GUI) -> Element<'a, Message> {
     match &pane.kind {
-        PaneKind::Titles => container(scrollable(
-            pane.list
-                .as_ref()
-                .unwrap()
-                .view(backend.view(), |_, _, _| theme::Text::Default),
-        ))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .padding(5)
-        .center_y()
-        .into(),
+        PaneKind::Titles => {
+            if let State::Loading = gui.state {
+                container(
+                    canvas(&gui.loading)
+                        .width(Length::Fill)
+                        .height(Length::Fill),
+                )
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .center_y()
+                .into()
+            } else {
+                container(
+                    scrollable(
+                        pane.list
+                            .as_ref()
+                            .unwrap()
+                            .view(gui.backend.view(), |_, _, _| theme::Text::Default),
+                    )
+                    .height(Length::Shrink)
+                    .id(SCROLLABLE_ID.clone()),
+                )
+                .width(Length::Fill)
+                .padding(5)
+                .center_y()
+                .into()
+            }
+        }
+        PaneKind::Episodes(title) => {
+            let title = gui.backend.titles[*title].lock().unwrap();
 
-        PaneKind::Episodes(title) => container(scrollable(pane.list.as_ref().unwrap().view(
-            backend.titles[*title].view(),
-            |focused, id, _| {
-                let watched = backend.get_episode(*title, id).metadata.watched;
-
-                match id == focused {
-                    true if watched => theme::Text::WatchedFocus,
-                    false if watched => theme::Text::Watched,
-                    true | false => theme::Text::Default,
-                }
-            },
-        )))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .padding(5)
-        .center_y()
-        .into(),
+            container(
+                scrollable(
+                    pane.list
+                        .as_ref()
+                        .unwrap()
+                        .view(title.view(), |focused, id, _| {
+                            let watched = title.get_episode_ref(id).metadata.watched;
+                            match id == focused {
+                                true if watched => theme::Text::WatchedFocus,
+                                false if watched => theme::Text::Watched,
+                                true | false => theme::Text::Default,
+                            }
+                        }),
+                )
+                .height(Length::Shrink)
+                .id(SCROLLABLE_ID.clone()),
+            )
+            .width(Length::Fill)
+            .padding(5)
+            .center_y()
+            .into()
+        }
         PaneKind::Metadata(episode) => container(
             column![
                 image::Image::new(&episode.thumbnail_path),

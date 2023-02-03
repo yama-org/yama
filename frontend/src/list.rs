@@ -1,4 +1,4 @@
-use crate::frontend::theme::{self, widget::Element};
+use crate::theme::{self, widget::Element};
 use iced::widget::{button, pane_grid::Direction, text, Column};
 use iced::Length;
 
@@ -44,8 +44,8 @@ impl List {
         &self,
         content: &[String],
         style: impl Fn(usize, usize, bool) -> <theme::Theme as text::StyleSheet>::Style,
-    ) -> Element<'a, crate::frontend::Message> {
-        let mut arr: Vec<Element<'a, crate::frontend::Message>> = Vec::new();
+    ) -> Element<'a, super::Message> {
+        let mut arr: Vec<Element<'a, super::Message>> = Vec::new();
 
         for (id, cont) in content.iter().enumerate() {
             arr.push(

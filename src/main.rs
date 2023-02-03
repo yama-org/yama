@@ -1,18 +1,20 @@
-pub mod backend;
-pub mod frontend;
+use frontend::GUI;
+use tracing::info;
+use tracing_subscriber::EnvFilter;
 
-use crate::frontend::GUI;
-use iced::{window, Application, Settings};
+pub fn main() -> frontend::Result {
+    setup();
+    info!("Starting up yama...");
+    GUI::execute()
+}
 
-pub fn main() -> iced::Result {
-    GUI::run(Settings {
-        id: None,
-        antialiasing: true,
-        window: window::Settings {
-            size: (1920, 1080),
-            ..window::Settings::default()
-        },
-        //default_font: Some(include_bytes!("../res/linuxBiolinum.ttf")),
-        ..Settings::default()
-    })
+fn setup() {
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "none,yama=info,backend=info,frontend=info")
+    }
+
+    tracing_subscriber::fmt::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_ansi(false)
+        .init();
 }

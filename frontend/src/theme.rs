@@ -7,7 +7,7 @@ use iced::{application, color, Color};
 // expects use of iced::Theme by default.
 pub mod widget {
     #![allow(dead_code)]
-    use crate::frontend::theme::Theme;
+    use crate::theme::Theme;
 
     pub type Renderer = iced::Renderer<Theme>;
     pub type Element<'a, Message> = iced::Element<'a, Message, Renderer>;

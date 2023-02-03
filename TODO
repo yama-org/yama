@@ -1,0 +1,6 @@
+[X] Separate Workspaces
+[] Improve checking of episodes cache (just checking for the .metadata folder won't cut it anymore)
+[] Move Title thumbnail to .metadata folder
+[X] Fix Title thumbnail path to always be utf-8
+[] Cache Title metadata
+[] Pretty format Title metadata

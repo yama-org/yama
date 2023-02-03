@@ -1,4 +1,4 @@
-use crate::frontend::theme::{self, Theme};
+use crate::theme::{self, Theme};
 use iced::widget::canvas::stroke::{self, Stroke};
 use iced::widget::canvas::{self, Cursor, Path};
 use iced::{Point, Rectangle, Vector};

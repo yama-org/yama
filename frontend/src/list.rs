@@ -7,6 +7,7 @@ pub struct List {
     pub focused: usize,
     pub size: usize,
     pub font_size: u16,
+    pub empty: bool,
 }
 
 impl List {
@@ -15,14 +16,17 @@ impl List {
             focused,
             size,
             font_size: 24,
+            empty: size == 0,
         }
     }
 
     pub fn update(&mut self, direction: Direction) {
-        match direction {
-            Direction::Up => self.increment(),
-            Direction::Down => self.decrement(),
-            _ => (),
+        if !self.empty {
+            match direction {
+                Direction::Up => self.increment(),
+                Direction::Down => self.decrement(),
+                _ => (),
+            }
         }
     }
 
@@ -43,7 +47,7 @@ impl List {
     pub fn view<'a>(
         &self,
         content: &[String],
-        style: impl Fn(usize, usize, bool) -> <theme::Theme as text::StyleSheet>::Style,
+        style: impl Fn(usize, usize) -> <theme::Theme as text::StyleSheet>::Style,
     ) -> Element<'a, super::Message> {
         let mut arr: Vec<Element<'a, super::Message>> = Vec::new();
 
@@ -52,7 +56,7 @@ impl List {
                 button(
                     text(cont)
                         .size(self.font_size)
-                        .style(style(self.focused, id, false)),
+                        .style(style(self.focused, id)),
                 )
                 .style(if id == self.focused {
                     theme::Button::Focused

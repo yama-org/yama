@@ -1,7 +1,7 @@
 mod list;
 mod loading;
 mod modal;
-mod panels;
+pub mod panels;
 mod theme;
 
 use crate::list::List;
@@ -10,11 +10,14 @@ use crate::modal::Modal;
 use crate::panels::Pane;
 use crate::theme::widget::Element;
 use crate::theme::Theme;
+
+use bridge::BridgeMessage;
+use bridge::FrontendMessage as Message;
+use bridge::PanelsMessage;
 use iced::widget::{canvas, column, container, pane_grid::Direction, text};
 use iced::{alignment, executor, keyboard, window};
 use iced::{Application, Command, Length, Settings, Subscription};
 use iced_native::{event, subscription, Event};
-use std::time::Instant;
 
 pub type Result = std::result::Result<(), iced::Error>;
 
@@ -25,16 +28,10 @@ pub enum State {
     Watching,
 }
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    Loading(Instant),
-    PaneAction(panels::Message),
-}
-
 #[derive(Debug)]
 pub struct GUI {
     state: State,
-    pane: Pane,
+    pane: Option<Pane>,
     loading: LoadingCircle,
 }
 
@@ -59,17 +56,14 @@ impl Application for GUI {
     type Executor = executor::Default;
     type Flags = ();
 
-    fn new(_: ()) -> (Self, Command<Message>) {
+    fn new(_: Self::Flags) -> (Self, Command<Message>) {
         (
             GUI {
                 state: State::Loading,
-                pane: Pane::new(),
                 loading: LoadingCircle::new(),
+                pane: None,
             },
-            Command::perform(
-                async { panels::Message::LoadingTitles },
-                Message::PaneAction,
-            ),
+            Command::none(),
         )
     }
 
@@ -81,11 +75,31 @@ impl Application for GUI {
         match self.state {
             State::Loading => match message {
                 Message::Loading(instant) => self.loading.update(instant),
-                Message::PaneAction(message) => return self.pane.update(message, &mut self.state),
+                Message::Bridge(msg) => match msg {
+                    BridgeMessage::Ready(sender, cache) => {
+                        self.pane = Some(Pane::new(cache, sender));
+                        self.state = State::Normal;
+
+                        return Command::perform(
+                            async {
+                                BridgeMessage::PaneAction(PanelsMessage::FocusItem(Direction::Left))
+                            },
+                            Message::Bridge,
+                        );
+                    }
+                    BridgeMessage::PaneAction(message) => {
+                        if let Some(pane) = &mut self.pane {
+                            return pane.update(message, &mut self.state);
+                        }
+                    }
+                    _ => (),
+                },
             },
             State::Normal | State::Watching => {
-                if let Message::PaneAction(message) = message {
-                    return self.pane.update(message, &mut self.state);
+                if let Some(pane) = &mut self.pane {
+                    if let Message::Bridge(BridgeMessage::PaneAction(message)) = message {
+                        return pane.update(message, &mut self.state);
+                    }
                 }
             }
         }
@@ -96,23 +110,30 @@ impl Application for GUI {
     fn subscription(&self) -> Subscription<Message> {
         match self.state {
             //Loading subscription, disables input
-            State::Loading => window::frames().map(Message::Loading),
+            State::Loading => Subscription::batch(vec![
+                bridge::start().map(Message::Bridge),
+                window::frames().map(Message::Loading),
+            ]),
 
             //Input subscription
-            State::Normal => subscription::events_with(|event, status| {
-                if let event::Status::Captured = status {
-                    return None;
-                }
+            State::Normal => Subscription::batch(vec![
+                bridge::start().map(Message::Bridge),
+                subscription::events_with(|event, status| {
+                    if let event::Status::Captured = status {
+                        return None;
+                    }
 
-                match event {
-                    Event::Keyboard(keyboard::Event::KeyPressed {
-                        key_code,
-                        modifiers: _,
-                    }) => handle_hotkey(key_code),
-                    _ => None,
-                }
-            }),
-            _ => Subscription::none(),
+                    match event {
+                        Event::Keyboard(keyboard::Event::KeyPressed {
+                            key_code,
+                            modifiers: _,
+                        }) => handle_hotkey(key_code),
+                        _ => None,
+                    }
+                }),
+            ]),
+
+            State::Watching => bridge::start().map(Message::Bridge),
         }
     }
 
@@ -126,7 +147,13 @@ impl Application for GUI {
             .size(26)
             .vertical_alignment(alignment::Vertical::Center);
 
-        let content = container(column![title, self.pane.view(), help].spacing(10))
+        let pane_view = if let Some(pane) = &self.pane {
+            pane.view()
+        } else {
+            text("").into()
+        };
+
+        let content = container(column![title, pane_view, help].spacing(10))
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(35);
@@ -138,8 +165,8 @@ impl Application for GUI {
                         .width(Length::Fill)
                         .height(Length::Fill),
                 )
-                .width(Length::Units(300))
-                .height(Length::Units(300))
+                .width(Length::Fixed(300.0))
+                .height(Length::Fixed(300.0))
                 .padding(10);
 
                 Modal::new(content, modal).into()
@@ -153,8 +180,8 @@ impl Application for GUI {
                         .width(Length::Fill)
                         .height(Length::Fill),
                 )
-                .width(Length::Units(300))
-                .height(Length::Units(300))
+                .width(Length::Fixed(300.0))
+                .height(Length::Fixed(300.0))
                 .padding(10);
 
                 Modal::new(content, modal).into()
@@ -168,13 +195,13 @@ fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
     use keyboard::KeyCode;
 
     let msg = match key_code {
-        KeyCode::Up => panels::Message::FocusItem(Direction::Up),
-        KeyCode::Down => panels::Message::FocusItem(Direction::Down),
-        KeyCode::Right => panels::Message::Enter,
-        KeyCode::Enter => panels::Message::Enter,
-        KeyCode::Left => panels::Message::Back,
+        KeyCode::Up => PanelsMessage::FocusItem(Direction::Up),
+        KeyCode::Down => PanelsMessage::FocusItem(Direction::Down),
+        KeyCode::Right => PanelsMessage::Enter,
+        KeyCode::Enter => PanelsMessage::Enter,
+        KeyCode::Left => PanelsMessage::Back,
         _ => return None,
     };
 
-    Some(Message::PaneAction(msg))
+    Some(Message::Bridge(BridgeMessage::PaneAction(msg)))
 }

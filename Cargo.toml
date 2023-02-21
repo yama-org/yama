@@ -1,6 +1,6 @@
 [package]
 name = "yama"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Agustin Marcelo Marco Bacigalupo <01marcoagustin@gmail.com>"]
 license = "MIT"
@@ -9,10 +9,10 @@ license = "MIT"
 members = [
 	"backend",
 	"frontend",
+	"bridge",
 ]
 
 [dependencies]
-backend = { path = "./backend" }
 frontend = { path = "./frontend" }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

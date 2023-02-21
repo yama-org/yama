@@ -5,29 +5,25 @@ pub mod video_metadata;
 use crate::api::Data;
 use crate::backend::title::Title;
 use crate::config::Config;
-use crate::Media;
 
 use core::fmt::Debug;
-use once_cell::sync::OnceCell;
 use std::{
     env, fs,
     io::{self, Error, ErrorKind},
     path::PathBuf,
     process::{Command, Output},
-    sync::{Arc, Mutex},
 };
 use tracing::warn;
 
 #[derive(Debug)]
 pub struct Backend {
-    pub titles: Vec<Media<Title>>,
+    pub titles: Vec<Title>,
     pub count: usize,
-    cache: OnceCell<Vec<String>>,
 }
 
 impl Default for Backend {
-    fn default() -> Backend {
-        Backend::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -39,7 +35,6 @@ impl Backend {
             .expect("[ERROR] - No valid titles inside selected folder.");
 
         Backend {
-            cache: OnceCell::default(),
             count: titles.len(),
             titles,
         }
@@ -78,7 +73,7 @@ impl Backend {
         Ok(files)
     }
 
-    fn load_titles(config: Config) -> io::Result<Vec<Media<Title>>> {
+    fn load_titles(config: Config) -> io::Result<Vec<Title>> {
         let mut series: Vec<Title> = Backend::get_files(&config.series_path)?
             .into_iter()
             .filter(|x| match fs::metadata(x) {
@@ -90,35 +85,20 @@ impl Backend {
 
         series.sort_by(|a, b| alphanumeric_sort::compare_str(&a.name, &b.name));
 
-        Ok(series
-            .into_iter()
-            .map(|t| Arc::new(Mutex::new(t)))
-            .collect())
+        Ok(series)
     }
 
-    pub fn get_title(&self, number: usize) -> Media<Title> {
-        Arc::clone(&self.titles[number])
-    }
-
-    pub fn view(&self) -> &[String] {
-        self.cache.get_or_init(|| {
-            self.titles
-                .iter()
-                .map(|t| t.lock().unwrap_or_else(|t| t.into_inner()).name.clone())
-                .collect()
-        })
-    }
-
-    pub async fn batch_titles_data(titles: Vec<(PathBuf, String)>) -> Vec<Data> {
+    pub async fn download_title_data(&self) -> Vec<Data> {
         use crate::api::Api;
         use iced::futures::future;
 
         let api = Api::default();
 
-        let data_fut: Vec<_> = titles
+        let data_fut: Vec<_> = self
+            .titles
             .iter()
             .enumerate()
-            .map(|(id, (path, name))| api.query(path, name, id))
+            .map(|(id, t)| api.try_query(&t.path, &t.name, id))
             .map(Box::pin)
             .collect();
 
@@ -139,5 +119,9 @@ impl Backend {
         }
 
         rc
+    }
+
+    pub fn view(&self) -> Vec<String> {
+        self.titles.iter().map(|t| t.name.clone()).collect()
     }
 }

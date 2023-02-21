@@ -1,29 +1,27 @@
 use crate::api::Data;
 use crate::backend::{episode::Episode, Backend};
-use crate::{Media, Meta};
+use crate::Meta;
 
 use core::fmt::Debug;
-use once_cell::sync::OnceCell;
 use std::{
     fs,
     io::{self, Error, ErrorKind},
     path::PathBuf,
-    sync::{Arc, Mutex},
 };
 
 #[derive(Debug)]
 pub struct Title {
-    pub name: String,
     pub path: PathBuf,
-    pub count: usize,
-    episodes: Vec<Media<Episode>>,
-    cache: OnceCell<Vec<String>>,
+    pub name: String,
     pub data: Option<Data>,
+    pub episodes: Vec<Episode>,
+    pub count: usize,
 }
 
 impl Title {
     pub fn new(path: PathBuf) -> io::Result<Title> {
-        fs::metadata(&path)?; //We check if the dir is valid
+        fs::metadata(&path)?; // We check if the dir is valid
+        fs::create_dir_all(format!("{}/.metadata/", path.display()))?;
 
         let name = match path.file_name() {
             Some(path) => path.to_owned(),
@@ -46,93 +44,109 @@ impl Title {
         };
 
         Ok(Title {
-            //name: path.display().to_string().replace("./series/", ""),
-            name,
             path,
+            name,
+            data: None,
             episodes: Vec::new(),
             count: 0,
-            cache: OnceCell::default(),
-            data: None,
         })
     }
 
     /// Loads a list of video files as Episodes for a Title.
-    fn load_episodes(path: &PathBuf) -> Vec<Media<Episode>> {
-        //TODO: Improve video file detection
-        //const VIDEO_FORMATS: &[&str] = &[".mp4", ".mkv"];
-
-        //We made sure before creating this Title that the path is correct.
-        //So we can just unwrap it.
-        let mut episodes: Vec<Episode> = Backend::get_files(path)
-            .unwrap()
-            .into_iter()
-            .filter(|x| match fs::metadata(x) {
-                Ok(f) => f.is_file(),
-                Err(_) => false,
-            })
-            .filter(|x| {
-                match fs::read(x) {
-                    Ok(file) => infer::is_video(&file),
-                    Err(_) => false,
-                }
-                //let k = x.display().to_string();
-                //VIDEO_FORMATS.iter().any(|y| k.to_lowercase().contains(y))
-            })
-            .enumerate()
-            .flat_map(|(i, path)| Episode::new(path, i + 1))
-            .collect();
-
-        episodes.sort_by(|a, b| alphanumeric_sort::compare_str(&a.name, &b.name));
-
-        episodes
-            .into_iter()
-            .map(|e| Arc::new(Mutex::new(e)))
-            .collect()
-    }
-
-    pub fn get_or_init(&mut self, number: usize) -> Media<Episode> {
+    pub fn load_episodes(&mut self, skip_checking: bool) {
+        // We made sure before creating this Title that the path is correct.
+        // So we can just unwrap it.
         if self.episodes.is_empty() {
-            self.episodes = Title::load_episodes(&self.path);
-            self.count = self.episodes.len();
+            let mut paths: Vec<PathBuf> = Backend::get_files(&self.path)
+                .unwrap()
+                .into_iter()
+                .filter(|x| match fs::metadata(x) {
+                    Ok(f) => f.is_file(),
+                    Err(_) => false,
+                })
+                .filter(|x| {
+                    skip_checking
+                        || match fs::read(x) {
+                            Ok(file) => infer::is_video(&file),
+                            Err(_) => false,
+                        }
+                })
+                .collect();
+
+            paths.sort_by(|a, b| {
+                alphanumeric_sort::compare_str(a.to_str().unwrap(), b.to_str().unwrap())
+            });
+
+            let episodes: Vec<Episode> = paths
+                .into_iter()
+                .enumerate()
+                .flat_map(|(i, path)| Episode::new(path, i + 1))
+                .collect();
+
+            self.count = episodes.len();
+            self.episodes = episodes
         }
-        Arc::clone(&self.episodes[number])
     }
 
-    pub fn view(&self) -> &[String] {
-        self.cache.get_or_init(|| {
-            self.episodes
-                .iter()
-                .map(|e| e.lock().unwrap_or_else(|e| e.into_inner()).name.clone())
-                .collect()
-        })
+    pub fn view(&self) -> Vec<String> {
+        self.episodes.iter().map(|e| e.name.clone()).collect()
     }
 
-    pub fn get_episode(&self, number: usize) -> Media<Episode> {
-        Arc::clone(&self.episodes[number])
+    pub fn get_episode(&self, number: usize) -> &Episode {
+        &self.episodes[number]
     }
 
     pub fn is_loaded(&self) -> bool {
-        self.path.join(".metadata/").is_dir()
+        let dir = self.path.join(".metadata/");
+        if dir.is_dir() {
+            let files: Vec<bool> = match fs::read_dir(dir) {
+                Ok(files) => files
+                    .into_iter()
+                    .flatten()
+                    .map(|file| match fs::metadata(file.path()) {
+                        Ok(f) => {
+                            if f.is_dir() {
+                                match fs::read_dir(file.path()) {
+                                    Ok(f) => f.count() == 2,
+                                    Err(_) => false,
+                                }
+                            } else if f.is_file() {
+                                file.file_name() == "thumbnail.jpg"
+                                    || file.file_name() == "data.json"
+                            } else {
+                                false
+                            }
+                        }
+                        Err(_) => false,
+                    })
+                    .collect(),
+                Err(_) => vec![false],
+            };
+
+            !files.contains(&false)
+        } else {
+            false
+        }
     }
 }
 
 impl Meta for Title {
-    fn thumbnail(&self) -> &PathBuf {
+    fn thumbnail(&self) -> PathBuf {
         if let Some(data) = &self.data {
-            &data.thumbnail_path
+            data.thumbnail_path.clone()
         } else {
-            &self.path //TEMPORARY
+            PathBuf::from("./res/no_thumbnail.jpg")
         }
     }
 
     fn description(&self) -> String {
         if let Some(data) = &self.data {
             format!(
-                "{}\n\nDescription: {}\n\nGenres: {:?}",
-                data.media.title.english, data.media.description, data.media.genres
+                "{}\n\nDescription: {}\n\nGenres: {:?}\n\nStudio: {}",
+                data.media.title.english, data.media.description, data.media.genres, data.studio
             )
         } else {
-            "No data".to_string()
+            "No Data".to_string()
         }
     }
 }

@@ -4,14 +4,15 @@ use serial_test::serial;
 #[test]
 fn series_titles() {
     let backend = Backend::new();
-    let series: Vec<String> = backend
-        .titles
-        .into_iter()
-        .map(|t| t.lock().unwrap().name.clone())
-        .collect();
+    let series: Vec<String> = backend.view();
 
     assert_eq!(
-        vec!["Akiba Maid Wars", "Bocchi the Rock", "Girls Last Tour"],
+        vec![
+            "Akiba Maid Wars",
+            "Bocchi the Rock",
+            "Girls Last Tour",
+            "Hanasaku Iroha"
+        ],
         series
     );
 }
@@ -20,10 +21,9 @@ fn series_titles() {
 #[serial]
 fn serie_episodes() {
     let backend = Backend::new();
-    let title = backend.titles[0].lock().unwrap();
-    let episodes: &[String] = title.view();
+    let episodes: Vec<String> = backend.titles[0].view();
 
-    let base_name = &backend.titles[0].lock().unwrap().name;
+    let base_name = backend.titles[0].name.as_str();
     let mut episodes_test: Vec<String> = Vec::new();
 
     for i in 1..4 {
@@ -36,10 +36,11 @@ fn serie_episodes() {
 #[test]
 #[serial]
 fn open_episode() {
-    let backend = Backend::new();
-    let title = backend.titles[0].lock().unwrap();
-    let ep = title.get_episode(0);
-    let mut ep = ep.lock().unwrap();
+    let mut backend = Backend::new();
+    let title = &mut backend.titles[0];
+
+    title.load_episodes(false);
+    let ep = &mut title.episodes[0];
 
     let command = format!(
         "--start={} --end={} \"{}\"",
@@ -47,6 +48,7 @@ fn open_episode() {
         ep.metadata.duration - 4.0,
         ep.path.display()
     );
+
     let output = Backend::run_mpv(&command).expect("[ERROR] - Failed to execute process.");
     assert!(output.status.success());
 
@@ -57,10 +59,8 @@ fn open_episode() {
 #[test]
 #[serial]
 fn is_watched() {
-    let backend = Backend::new();
-    let title = backend.titles[1].lock().unwrap();
-    let ep = title.get_episode(1);
-    let mut ep = ep.lock().unwrap();
+    let mut backend = Backend::new();
+    let ep = &mut backend.titles[0].episodes[0];
 
     // Running video with mpv
     let command = format!(

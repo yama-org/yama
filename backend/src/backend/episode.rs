@@ -1,34 +1,32 @@
+use tracing::info;
+
 use crate::backend::{video_metadata::VideoMetadata, Backend};
 use crate::Meta;
 
 use core::fmt::Debug;
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{fs, io, path::PathBuf};
 
 #[derive(Debug)]
 pub struct Episode {
-    pub number: usize,
     pub name: String,
     pub path: PathBuf,
+    pub number: usize,
+    pub thumbnail_path: PathBuf,
     pub md_path: PathBuf,
     pub metadata: VideoMetadata,
-    pub thumbnail_path: PathBuf,
 }
 
 impl Episode {
-    pub fn new(path: PathBuf, number: usize) -> std::io::Result<Episode> {
-        //It's safe to just unwrap parent(), file_name() and to_str()
-        //because we made sure befor that this path is a valid file.
-        Episode::create_cache_folder(number, path.parent().unwrap())?;
+    pub fn new(path: PathBuf, number: usize) -> io::Result<Episode> {
+        // It's safe to just unwrap parent(), file_name() and to_str()
+        // because we made sure befor that this path is a valid file.
+        let dir = path.parent().unwrap();
+        fs::create_dir_all(format!("{}/.metadata/episode_{number}/", dir.display()))?;
 
         let mut old_md_path = path.clone();
         old_md_path.set_extension("md");
 
-        let md_path = old_md_path
-            .parent()
-            .unwrap()
+        let md_path = dir
             .join(format!(".metadata/episode_{number}/"))
             .join(old_md_path.file_name().unwrap());
 
@@ -41,9 +39,7 @@ impl Episode {
             fs::rename(old_md_path, &md_path)?;
         }
 
-        let thumbnail_path = path
-            .parent()
-            .unwrap()
+        let thumbnail_path = dir
             .join(format!(".metadata/episode_{number}/"))
             .join("thumbnail.jpg");
 
@@ -68,14 +64,6 @@ impl Episode {
         })
     }
 
-    fn create_cache_folder(number: usize, title_path: &Path) -> io::Result<()> {
-        fs::create_dir_all(format!(
-            "{}/.metadata/episode_{number}",
-            title_path.display()
-        ))?;
-        Ok(())
-    }
-
     pub fn update_metadata(&mut self) -> io::Result<()> {
         let mut new_md_path = self.path.clone();
         new_md_path.set_extension("md");
@@ -85,10 +73,12 @@ impl Episode {
         Ok(())
     }
 
-    ///Runs episode on the current time (Restart it if it has been already watched)
+    /// Runs episode on the current time (Restart it if it has been already watched)
     ///
     /// Returns [`io::Error`] if the mpv fails to launch it or the metadata can not be updated.
     pub fn run(&mut self) -> io::Result<()> {
+        info!("Running {}", self.name);
+
         Backend::run_mpv(
             format!(
                 "--start={} \"{}\"",
@@ -101,13 +91,14 @@ impl Episode {
             )
             .as_str(),
         )?;
+
         self.update_metadata()
     }
 }
 
 impl Meta for Episode {
-    fn thumbnail(&self) -> &PathBuf {
-        &self.thumbnail_path
+    fn thumbnail(&self) -> PathBuf {
+        self.thumbnail_path.clone()
     }
 
     fn description(&self) -> String {

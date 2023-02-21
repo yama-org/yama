@@ -2,6 +2,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
+    ffi::OsString,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -18,9 +19,15 @@ query ($search: String) {
     },
     description,
     genres,
-    coverImage {
-        large,
-    },
+    bannerImage,
+    studios {
+        edges {
+          isMain,
+          node {
+            name
+          }
+        }
+      }
   }
 }
 "#;
@@ -44,6 +51,8 @@ pub struct Data {
     pub thumbnail_path: PathBuf,
     #[serde(skip)]
     pub id: usize,
+    #[serde(skip)]
+    pub studio: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -53,7 +62,8 @@ pub struct Media {
     pub title: Title,
     pub description: String,
     pub genres: Vec<String>,
-    cover_image: CoverImage,
+    banner_image: String,
+    pub studios: Studio,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -64,9 +74,20 @@ pub struct Title {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct CoverImage {
-    #[serde(rename = "large")]
-    image: String,
+pub struct Studio {
+    pub edges: Vec<Edges>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Edges {
+    pub is_main: bool,
+    pub node: Node,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Node {
+    pub name: String,
 }
 
 #[derive(Debug)]
@@ -132,7 +153,7 @@ impl Api {
         }
     }
 
-    pub async fn query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
+    async fn query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
         let json = json!({"query": QUERY, "variables": {"search": search}});
         let resp = self
             .client
@@ -152,10 +173,52 @@ impl Api {
         let result: Query =
             serde_json::from_str(&resp).map_err(|e| Error::new(e.into(), search))?;
 
+        std::fs::write(path.join(".metadata/data.json"), resp)
+            .map_err(|e| Error::new(e.into(), search))?;
+
         let data = result.data.download_image(self, path);
         let mut data = data.await?;
         data.set_id(id);
+        data.clean_description();
+        data.find_studio();
+
         Ok(data)
+    }
+
+    fn cached_query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
+        let content = std::fs::read_to_string(path.join(".metadata/data.json"))
+            .map_err(|e| Error::new(e.into(), search))?;
+
+        let result: Query =
+            serde_json::from_str(&content).map_err(|e| Error::new(e.into(), search))?;
+
+        let mut data = result.data;
+        data.set_id(id);
+        data.set_thumbnail_path(path.join(".metadata/thumbnail.jpg"));
+        data.clean_description();
+        data.find_studio();
+
+        Ok(data)
+    }
+
+    pub async fn try_query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
+        match std::fs::read_dir(path.join(".metadata/")) {
+            Ok(files) => {
+                let files: Vec<OsString> = files
+                    .into_iter()
+                    .flatten()
+                    .map(|file| file.file_name())
+                    .collect();
+                if files.contains(&OsString::from("thumbnail.jpg"))
+                    && files.contains(&OsString::from("data.json"))
+                {
+                    self.cached_query(path, search, id)
+                } else {
+                    self.query(path, search, id).await
+                }
+            }
+            Err(_) => self.query(path, search, id).await,
+        }
     }
 
     async fn download_image(&self, url: &str) -> Result<reqwest::Response> {
@@ -172,7 +235,7 @@ impl Api {
 impl Data {
     async fn download_image(mut self, api: &Api, path: &Path) -> Result<Data> {
         let bytes = api
-            .download_image(&self.media.cover_image.image)
+            .download_image(&self.media.banner_image)
             .await?
             .bytes()
             .await
@@ -180,7 +243,7 @@ impl Data {
 
         info!("Image downloaded for: {}", self.media.title.english);
 
-        let name_file = path.join("thumbnail.png");
+        let name_file = path.join(".metadata/thumbnail.jpg");
 
         let mut file = std::fs::File::create(&name_file)
             .map_err(|e| Error::new(e.into(), &self.media.title.english))?;
@@ -199,6 +262,28 @@ impl Data {
 
     fn set_id(&mut self, id: usize) -> &mut Self {
         self.id = id;
+        self
+    }
+
+    fn clean_description(&mut self) -> &mut Self {
+        self.media.description = self
+            .media
+            .description
+            .lines()
+            .next()
+            .unwrap()
+            .replace("<br>", "");
+        self
+    }
+
+    fn find_studio(&mut self) -> &mut Self {
+        for studio in &self.media.studios.edges {
+            if studio.is_main {
+                self.studio = studio.node.name.clone();
+                break;
+            }
+        }
+
         self
     }
 }

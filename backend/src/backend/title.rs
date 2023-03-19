@@ -8,6 +8,7 @@ use std::{
     io::{self, Error, ErrorKind},
     path::PathBuf,
 };
+use tracing::error;
 
 #[derive(Debug)]
 pub struct Title {
@@ -80,7 +81,13 @@ impl Title {
             let episodes: Vec<Episode> = paths
                 .into_iter()
                 .enumerate()
-                .flat_map(|(i, path)| Episode::new(path, i + 1))
+                .filter_map(|(i, path)| match Episode::new(path, i + 1) {
+                    Ok(ep) => Some(ep),
+                    Err(e) => {
+                        error!("{}", e);
+                        None
+                    }
+                })
                 .collect();
 
             self.count = episodes.len();
@@ -97,7 +104,9 @@ impl Title {
     }
 
     pub fn is_loaded(&self) -> bool {
-        let dir = self.path.join(".metadata/");
+        let dir = self.path.join(".metadata");
+        let mut folders: usize = 0;
+
         if dir.is_dir() {
             let files: Vec<bool> = match fs::read_dir(dir) {
                 Ok(files) => files
@@ -107,7 +116,10 @@ impl Title {
                         Ok(f) => {
                             if f.is_dir() {
                                 match fs::read_dir(file.path()) {
-                                    Ok(f) => f.count() == 2,
+                                    Ok(f) => {
+                                        folders += 1;
+                                        f.count() == 2
+                                    }
                                     Err(_) => false,
                                 }
                             } else if f.is_file() {
@@ -123,7 +135,7 @@ impl Title {
                 Err(_) => vec![false],
             };
 
-            !files.contains(&false)
+            !files.contains(&false) && folders > 0
         } else {
             false
         }

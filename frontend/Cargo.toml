@@ -10,6 +10,7 @@ bridge = { path = "../bridge" }
 backend = { path = "../backend" }
 iced = { version = "0.8.0", features = ["image", "debug", "tokio", "canvas"] }
 iced_native = "0.9.1"
+iced_lazy = "0.5.0"
 once_cell = "1.17.0"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

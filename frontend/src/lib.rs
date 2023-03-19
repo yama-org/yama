@@ -140,11 +140,11 @@ impl Application for GUI {
     fn view(&self) -> Element<Message> {
         let help = text("Up and Down to Move, Right or Enter to Accept")
             .width(Length::Fill)
-            .size(20)
+            .size(16)
             .horizontal_alignment(alignment::Horizontal::Right);
 
         let title = text("Y.A.M.A - Your Anime Manager Automata")
-            .size(26)
+            .size(24)
             .vertical_alignment(alignment::Vertical::Center);
 
         let pane_view = if let Some(pane) = &self.pane {
@@ -174,7 +174,7 @@ impl Application for GUI {
             State::Watching => {
                 let modal = container(
                     text("Watching episode...")
-                        .size(48)
+                        .size(42)
                         .vertical_alignment(alignment::Vertical::Center)
                         .horizontal_alignment(alignment::Horizontal::Center)
                         .width(Length::Fill)

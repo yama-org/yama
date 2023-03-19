@@ -6,7 +6,6 @@ use iced::Length;
 pub struct List {
     pub focused: usize,
     pub size: usize,
-    pub font_size: u16,
     pub empty: bool,
 }
 
@@ -15,7 +14,6 @@ impl List {
         List {
             focused,
             size,
-            font_size: 24,
             empty: size == 0,
         }
     }
@@ -53,18 +51,14 @@ impl List {
 
         for (id, cont) in content.iter().enumerate() {
             arr.push(
-                button(
-                    text(cont)
-                        .size(self.font_size)
-                        .style(style(self.focused, id)),
-                )
-                .style(if id == self.focused {
-                    theme::Button::Focused
-                } else {
-                    theme::Button::Default
-                })
-                .width(Length::Fill)
-                .into(),
+                button(text(cont).style(style(self.focused, id)))
+                    .style(if id == self.focused {
+                        theme::Button::Focused
+                    } else {
+                        theme::Button::Default
+                    })
+                    .width(Length::Fill)
+                    .into(),
             );
         }
 

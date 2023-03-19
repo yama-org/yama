@@ -1,3 +1,5 @@
+use std::vec;
+
 use super::theme::{self, widget::Element};
 use super::{List, State};
 
@@ -7,7 +9,8 @@ use bridge::{BackendMessage, PanelsMessage as Message};
 use iced::futures::channel::mpsc::Sender;
 use iced::widget::pane_grid::{self, Direction, PaneGrid};
 use iced::widget::{column, container, image, scrollable, text};
-use iced::{Command, Length};
+use iced::{Command, Length, Settings, Size};
+use iced_lazy::responsive;
 use once_cell::sync::Lazy;
 
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
@@ -121,7 +124,8 @@ impl Pane {
                         let mut y = (1.0 / list.size as f32) * list.focused as f32;
                         //Fixes top items being cut-out
                         if y > 0.1 {
-                            y += 1.0 / list.font_size as f32; //Fixes bottom items being cut-out
+                            y += 1.0 / Settings::<()>::default().default_text_size;
+                            //Fixes bottom items being cut-out
                         }
 
                         let metacache = if let PaneKind::Episodes(title) = panel.kind {
@@ -213,12 +217,14 @@ impl Pane {
         PaneGrid::new(&self.panes, |id, pane, _| {
             let is_focused = focus == Some(id);
 
-            let content =
-                pane_grid::Content::new(Pane::view_content(pane, self)).style(if is_focused {
-                    theme::Container::Focused
-                } else {
-                    theme::Container::Unfocused
-                });
+            let content = pane_grid::Content::new(responsive(move |size| {
+                Pane::view_content(pane, self, size)
+            }))
+            .style(if is_focused {
+                theme::Container::Focused
+            } else {
+                theme::Container::Unfocused
+            });
 
             match pane.kind {
                 PaneKind::Titles => {
@@ -238,7 +244,11 @@ impl Pane {
         .into()
     }
 
-    fn view_content<'a>(pane_data: &PaneData, pane: &Pane) -> Element<'a, super::Message> {
+    fn view_content<'a>(
+        pane_data: &'a PaneData,
+        pane: &Pane,
+        _size: Size,
+    ) -> Element<'a, super::Message> {
         match &pane_data.kind {
             PaneKind::Titles => container(
                 scrollable(
@@ -277,7 +287,7 @@ impl Pane {
             PaneKind::Metadata(meta) => container(scrollable(
                 column![
                     image::Image::new(meta.thumbnail.clone()),
-                    text(meta.description.clone()).size(24)
+                    text(meta.description.clone())
                 ]
                 .spacing(10),
             ))

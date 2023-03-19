@@ -75,9 +75,9 @@ pub fn start() -> Subscription<BridgeMessage> {
 
                     match msg {
                         BackendMessage::LoadTitleEpisodes(number) => {
-                            let title = backend.titles.get_mut(number).unwrap();
+                            //let title = backend.titles.get_mut(number).unwrap();
 
-                            if title.is_loaded() {
+                            /*if title.is_loaded() {
                                 title.load_episodes(false);
                                 let title_cache = TitleCache::new(title);
 
@@ -88,14 +88,14 @@ pub fn start() -> Subscription<BridgeMessage> {
                                     ))),
                                     State::Ready(receiver, backend),
                                 )
-                            } else {
-                                (
-                                    Some(BridgeMessage::PaneAction(
-                                        PanelsMessage::LoadingEpisodes(number),
-                                    )),
-                                    State::Ready(receiver, backend),
-                                )
-                            }
+                            } else {*/
+                            (
+                                Some(BridgeMessage::PaneAction(PanelsMessage::LoadingEpisodes(
+                                    number,
+                                ))),
+                                State::Ready(receiver, backend),
+                            )
+                            //}
                         }
                         BackendMessage::GettingTitleEpisodes(number) => {
                             let title = backend.titles.get_mut(number).unwrap();
@@ -121,7 +121,7 @@ pub fn start() -> Subscription<BridgeMessage> {
                                 .get_mut(number)
                                 .unwrap();
 
-                            episode.run().unwrap();
+                            episode.run().expect("[ERROR] - Cannot run episode.");
                             let episode_cache = EpisodeCache::new(episode);
 
                             (

@@ -30,28 +30,40 @@ impl Episode {
             .join(format!(".metadata/episode_{number}/"))
             .join(old_md_path.file_name().unwrap());
 
+        let thumbnail_path = dir
+            .join(format!(".metadata/episode_{number}/"))
+            .join("thumbnail.jpg");
+
         if fs::metadata(&md_path).is_err() {
-            let command = format!("--no-video --end=0.0001 \"{}\"", path.display());
-            Backend::run_mpv(&command)?;
+            let cmd = if cfg!(target_os = "windows") {
+                format!("--no-video,--end=0.1,{}", path.display())
+            } else {
+                format!("--no-video --end=0.1 \"{}\"", path.display())
+            };
+
+            Backend::run_mpv(&cmd)?;
         }
 
         if fs::metadata(&old_md_path).is_ok() {
             fs::rename(old_md_path, &md_path)?;
         }
 
-        let thumbnail_path = dir
-            .join(format!(".metadata/episode_{number}/"))
-            .join("thumbnail.jpg");
-
         if fs::metadata(&thumbnail_path).is_err() {
-            Backend::run_process(
+            let cmd = if cfg!(target_os = "windows") {
                 format!(
-                    "ffmpegthumbnailer -i \"{}\" -o \"{}\" -s 0",
+                    "ffmpeg,-i,{},-vf,thumbnail,-frames:v,1,{},-f,mjpeg",
                     path.display(),
                     thumbnail_path.display(),
                 )
-                .as_str(),
-            )?;
+            } else {
+                format!(
+                    "ffmpeg -i \"{}\" -vf \"thumbnail\" -frames:v 1 \"{}\" -f mjpeg",
+                    path.display(),
+                    thumbnail_path.display(),
+                )
+            };
+
+            Backend::run_process(&cmd)?;
         }
 
         Ok(Episode {
@@ -79,7 +91,17 @@ impl Episode {
     pub fn run(&mut self) -> io::Result<()> {
         info!("Running {}", self.name);
 
-        Backend::run_mpv(
+        let cmd = if cfg!(target_os = "windows") {
+            format!(
+                "--start={},{}",
+                if self.metadata.watched {
+                    0.0
+                } else {
+                    self.metadata.current
+                },
+                self.path.display()
+            )
+        } else {
             format!(
                 "--start={} \"{}\"",
                 if self.metadata.watched {
@@ -89,9 +111,9 @@ impl Episode {
                 },
                 self.path.display()
             )
-            .as_str(),
-        )?;
+        };
 
+        Backend::run_mpv(&cmd)?;
         self.update_metadata()
     }
 }

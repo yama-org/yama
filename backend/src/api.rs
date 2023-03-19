@@ -173,7 +173,7 @@ impl Api {
         let result: Query =
             serde_json::from_str(&resp).map_err(|e| Error::new(e.into(), search))?;
 
-        std::fs::write(path.join(".metadata/data.json"), resp)
+        std::fs::write(path.join(".metadata").join("data.json"), resp)
             .map_err(|e| Error::new(e.into(), search))?;
 
         let data = result.data.download_image(self, path);
@@ -186,7 +186,7 @@ impl Api {
     }
 
     fn cached_query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
-        let content = std::fs::read_to_string(path.join(".metadata/data.json"))
+        let content = std::fs::read_to_string(path.join(".metadata").join("data.json"))
             .map_err(|e| Error::new(e.into(), search))?;
 
         let result: Query =
@@ -194,7 +194,7 @@ impl Api {
 
         let mut data = result.data;
         data.set_id(id);
-        data.set_thumbnail_path(path.join(".metadata/thumbnail.jpg"));
+        data.set_thumbnail_path(path.join(".metadata").join("thumbnail.jpg"));
         data.clean_description();
         data.find_studio();
 
@@ -202,7 +202,7 @@ impl Api {
     }
 
     pub async fn try_query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
-        match std::fs::read_dir(path.join(".metadata/")) {
+        match std::fs::read_dir(path.join(".metadata")) {
             Ok(files) => {
                 let files: Vec<OsString> = files
                     .into_iter()
@@ -243,7 +243,7 @@ impl Data {
 
         info!("Image downloaded for: {}", self.media.title.english);
 
-        let name_file = path.join(".metadata/thumbnail.jpg");
+        let name_file = path.join(".metadata").join("thumbnail.jpg");
 
         let mut file = std::fs::File::create(&name_file)
             .map_err(|e| Error::new(e.into(), &self.media.title.english))?;

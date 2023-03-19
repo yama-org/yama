@@ -1,8 +1,0 @@
-[X] Separate Workspaces
-[X] Do backend work asynchronously
-[X] Improve checking of episodes cache (just checking for the .metadata folder won't cut it anymore)
-[X] Move Title thumbnail to .metadata folder
-[X] Fix Title thumbnail path to always be utf-8
-[X] Cache Title metadata
-[X] Pretty format Title metadata
-[X] Reduce cache re-generation

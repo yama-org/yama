@@ -41,12 +41,25 @@ impl Backend {
     }
 
     pub fn run_process(cmd: &str) -> io::Result<Output> {
-        let output = Command::new("sh")
-            .current_dir(
-                env::current_dir().expect("[ERROR] - YAMA can not work on this invalid directory."),
-            )
-            .args(["-c", cmd])
-            .output()?;
+        let output = if cfg!(target_os = "windows") {
+            let mut cmd = cmd.split(',');
+
+            Command::new(cmd.next().unwrap())
+                .current_dir(
+                    env::current_dir()
+                        .expect("[ERROR] - YAMA can not work on this invalid directory."),
+                )
+                .args(cmd)
+                .output()?
+        } else {
+            Command::new("sh")
+                .current_dir(
+                    env::current_dir()
+                        .expect("[ERROR] - YAMA can not work on this invalid directory."),
+                )
+                .args(["-c", cmd])
+                .output()?
+        };
 
         if !output.status.success() {
             return Err(Error::new(
@@ -56,11 +69,18 @@ impl Backend {
                 }),
             ));
         }
+
         Ok(output)
     }
 
     pub fn run_mpv(command: &str) -> io::Result<Output> {
-        Backend::run_process(format!("mpv --script=./scripts/save_info.lua {command}").as_str())
+        let cmd = if cfg!(target_os = "windows") {
+            format!("mpv,--script=./scripts/save_info.lua,{command}")
+        } else {
+            format!("mpv --script=./scripts/save_info.lua {command}")
+        };
+
+        Backend::run_process(&cmd)
     }
 
     fn get_files(path: &PathBuf) -> io::Result<Vec<PathBuf>> {

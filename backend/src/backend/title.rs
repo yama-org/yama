@@ -5,10 +5,10 @@ use crate::Meta;
 use core::fmt::Debug;
 use std::{
     fs,
-    io::{self, Error, ErrorKind},
+    io::{self, Error, ErrorKind, Write},
     path::PathBuf,
 };
-use tracing::error;
+use tracing::{error, info};
 
 #[derive(Debug)]
 pub struct Title {
@@ -54,29 +54,44 @@ impl Title {
     }
 
     /// Loads a list of video files as Episodes for a Title.
-    pub fn load_episodes(&mut self, skip_checking: bool) {
+    pub fn load_episodes(&mut self) {
         // We made sure before creating this Title that the path is correct.
         // So we can just unwrap it.
         if self.episodes.is_empty() {
-            let mut paths: Vec<PathBuf> = Backend::get_files(&self.path)
-                .unwrap()
-                .into_iter()
-                .filter(|x| match fs::metadata(x) {
-                    Ok(f) => f.is_file(),
-                    Err(_) => false,
-                })
-                .filter(|x| {
-                    skip_checking
-                        || match fs::read(x) {
-                            Ok(file) => infer::is_video(&file),
-                            Err(_) => false,
-                        }
-                })
-                .collect();
+            let paths: Vec<PathBuf> = if !self.is_loaded() {
+                info!("No metadata previously generated.");
 
-            paths.sort_by(|a, b| {
-                alphanumeric_sort::compare_str(a.to_str().unwrap(), b.to_str().unwrap())
-            });
+                let mut paths: Vec<PathBuf> = Backend::get_files(&self.path)
+                    .unwrap()
+                    .into_iter()
+                    .filter(|x| match fs::metadata(x) {
+                        Ok(f) => f.is_file(),
+                        Err(_) => false,
+                    })
+                    .filter(|x| match fs::read(x) {
+                        Ok(file) => infer::is_video(&file),
+                        Err(_) => false,
+                    })
+                    .collect();
+
+                paths.sort_by(|a, b| {
+                    alphanumeric_sort::compare_str(a.to_str().unwrap(), b.to_str().unwrap())
+                });
+
+                let mut file =
+                    fs::File::create(self.path.join(".metadata").join("files.md")).unwrap();
+
+                for path in &paths {
+                    writeln!(file, "{}", path.display()).unwrap();
+                }
+
+                paths
+            } else {
+                let file =
+                    fs::read_to_string(self.path.join(".metadata").join("files.md")).unwrap();
+
+                file.lines().map(PathBuf::from).collect()
+            };
 
             let episodes: Vec<Episode> = paths
                 .into_iter()
@@ -123,8 +138,10 @@ impl Title {
                                     Err(_) => false,
                                 }
                             } else if f.is_file() {
-                                file.file_name() == "thumbnail.jpg"
-                                    || file.file_name() == "data.json"
+                                matches!(
+                                    file.file_name().to_str().unwrap(),
+                                    "thumbnail.jpg" | "data.json" | "files.md"
+                                )
                             } else {
                                 false
                             }

@@ -78,7 +78,7 @@ pub fn start() -> Subscription<BridgeMessage> {
                             //let title = backend.titles.get_mut(number).unwrap();
 
                             /*if title.is_loaded() {
-                                title.load_episodes(false);
+                                title.load_episodes();
                                 let title_cache = TitleCache::new(title);
 
                                 (
@@ -101,7 +101,7 @@ pub fn start() -> Subscription<BridgeMessage> {
                             let title = backend.titles.get_mut(number).unwrap();
                             info!("Loading episodes of {}.", title.name);
 
-                            title.load_episodes(false);
+                            title.load_episodes();
                             let title_cache = TitleCache::new(title);
 
                             (

@@ -35,13 +35,27 @@ impl Episode {
             .join("thumbnail.jpg");
 
         if fs::metadata(&md_path).is_err() {
-            let cmd = if cfg!(target_os = "windows") {
+            // Non-performant way of generating metadata
+            /*let cmd = if cfg!(target_os = "windows") {
                 format!("--no-video,--end=0.1,{}", path.display())
             } else {
                 format!("--no-video --end=0.1 \"{}\"", path.display())
             };
 
-            Backend::run_mpv(&cmd)?;
+            Backend::run_mpv(&cmd)?;*/
+
+            // The performant way
+            let output = Backend::run_process(
+                &format!("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{}\"", 
+                path.display())
+            ).unwrap();
+
+            let duration: f64 = String::from_utf8(output.stdout)
+                .unwrap()
+                .trim()
+                .parse()
+                .unwrap();
+            VideoMetadata::default_file(duration, &md_path)?;
         }
 
         if fs::metadata(&old_md_path).is_ok() {

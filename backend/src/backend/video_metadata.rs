@@ -1,4 +1,5 @@
 use core::fmt::Debug;
+use std::io::Write;
 use std::{fs, io, path::PathBuf};
 
 #[derive(Debug, Clone, Copy)]
@@ -62,5 +63,14 @@ impl VideoMetadata {
         let minutes = (duration / 60.0).trunc();
         let seconds = (((duration / 60.0) - minutes) * 60.0).floor();
         format!("{minutes:02.0}:{seconds:02.0}")
+    }
+
+    pub fn default_file(duration: f64, path: &PathBuf) -> io::Result<()> {
+        let mut file = fs::File::create(path)?;
+
+        let content =
+            format!("Duration: {duration}\nCurrent: 0.00\nRemaining: 0.00\nStatus: false");
+
+        file.write_all(content.as_bytes())
     }
 }

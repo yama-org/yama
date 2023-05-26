@@ -8,33 +8,49 @@ use iced::subscription::{self, Subscription};
 use iced::widget::pane_grid::Direction;
 use std::time::Instant;
 use tracing::info;
+use tracing_unwrap::{OptionExt, ResultExt};
 
 #[derive(Debug, Clone)]
 pub enum BackendMessage {
-    LoadTitleEpisodes(usize),
-    GettingTitleEpisodes(usize),
+    LoadTitleEpisodes(usize, bool),
+    GettingTitleEpisodes(usize, bool),
+    MarkTitleEpisodes(usize, usize),
     WatchEpisode(usize, usize),
+    MarkEpisode(usize, usize),
+}
+
+#[derive(Debug, Clone)]
+pub enum MenuBar {
+    About,
+    Config,
+    Yama,
 }
 
 #[derive(Debug, Clone)]
 pub enum FrontendMessage {
     Bridge(BridgeMessage),
     Loading(Instant),
+    MenuBar(MenuBar),
+    HideMenubar,
+    FileDialog,
+    Exit,
 }
 
 #[derive(Debug, Clone)]
 pub enum BridgeMessage {
     Ready(mpsc::Sender<BackendMessage>, Cache),
     PaneAction(PanelsMessage),
-    None,
 }
 
 #[derive(Debug, Clone)]
 pub enum PanelsMessage {
-    EpisodesLoaded(usize, TitleCache),
-    LoadingEpisodes(usize),
+    EpisodesLoaded(usize, TitleCache, bool),
+    LoadingEpisodes(usize, bool),
     FocusItem(Direction),
-    SavingEpisode(usize, usize, EpisodeCache),
+    SavingEpisode(usize, Vec<EpisodeCache>),
+    MarkTitleEpisodes,
+    MarkEpisode,
+    Refresh,
     Enter,
     Back,
 }
@@ -65,7 +81,7 @@ pub fn start() -> Subscription<BridgeMessage> {
                     let cache = Cache::new(&backend);
 
                     (
-                        Some(BridgeMessage::Ready(sender, cache)),
+                        BridgeMessage::Ready(sender, cache),
                         State::Ready(receiver, backend),
                     )
                 }
@@ -74,41 +90,25 @@ pub fn start() -> Subscription<BridgeMessage> {
                     let msg = receiver.select_next_some().await;
 
                     match msg {
-                        BackendMessage::LoadTitleEpisodes(number) => {
-                            //let title = backend.titles.get_mut(number).unwrap();
-
-                            /*if title.is_loaded() {
-                                title.load_episodes();
-                                let title_cache = TitleCache::new(title);
-
-                                (
-                                    Some(BridgeMessage::PaneAction(PanelsMessage::EpisodesLoaded(
-                                        number,
-                                        title_cache,
-                                    ))),
-                                    State::Ready(receiver, backend),
-                                )
-                            } else {*/
-                            (
-                                Some(BridgeMessage::PaneAction(PanelsMessage::LoadingEpisodes(
-                                    number,
-                                ))),
-                                State::Ready(receiver, backend),
-                            )
-                            //}
-                        }
-                        BackendMessage::GettingTitleEpisodes(number) => {
-                            let title = backend.titles.get_mut(number).unwrap();
+                        BackendMessage::LoadTitleEpisodes(number, refresh) => (
+                            BridgeMessage::PaneAction(PanelsMessage::LoadingEpisodes(
+                                number, refresh,
+                            )),
+                            State::Ready(receiver, backend),
+                        ),
+                        BackendMessage::GettingTitleEpisodes(number, refresh) => {
+                            let title = backend.titles.get_mut(number).unwrap_or_log();
                             info!("Loading episodes of {}.", title.name);
 
-                            title.load_episodes();
+                            title.load_episodes(refresh);
                             let title_cache = TitleCache::new(title);
 
                             (
-                                Some(BridgeMessage::PaneAction(PanelsMessage::EpisodesLoaded(
+                                BridgeMessage::PaneAction(PanelsMessage::EpisodesLoaded(
                                     number,
                                     title_cache,
-                                ))),
+                                    refresh,
+                                )),
                                 State::Ready(receiver, backend),
                             )
                         }
@@ -116,20 +116,61 @@ pub fn start() -> Subscription<BridgeMessage> {
                             let episode = backend
                                 .titles
                                 .get_mut(title)
-                                .unwrap()
+                                .unwrap_or_log()
                                 .episodes
                                 .get_mut(number)
-                                .unwrap();
+                                .unwrap_or_log();
 
-                            episode.run().expect("[ERROR] - Cannot run episode.");
+                            episode.run().expect_or_log("[ERROR] - Cannot run episode.");
                             let episode_cache = EpisodeCache::new(episode);
 
                             (
-                                Some(BridgeMessage::PaneAction(PanelsMessage::SavingEpisode(
+                                BridgeMessage::PaneAction(PanelsMessage::SavingEpisode(
                                     title,
-                                    number,
-                                    episode_cache,
-                                ))),
+                                    vec![episode_cache],
+                                )),
+                                State::Ready(receiver, backend),
+                            )
+                        }
+                        BackendMessage::MarkEpisode(title, number) => {
+                            let episode = backend
+                                .titles
+                                .get_mut(title)
+                                .unwrap_or_log()
+                                .episodes
+                                .get_mut(number)
+                                .unwrap_or_log();
+
+                            episode
+                                .as_watched()
+                                .expect_or_log("[ERROR] - Cannot mark episode.");
+                            let episode_cache = EpisodeCache::new(episode);
+
+                            (
+                                BridgeMessage::PaneAction(PanelsMessage::SavingEpisode(
+                                    title,
+                                    vec![episode_cache],
+                                )),
+                                State::Ready(receiver, backend),
+                            )
+                        }
+                        BackendMessage::MarkTitleEpisodes(title_number, number) => {
+                            let title = backend.titles.get_mut(title_number).unwrap_or_log();
+                            let mut episodes_cache = Vec::with_capacity(number);
+
+                            title
+                                .as_watched(number)
+                                .expect_or_log("[ERROR] - Cannot mark episode.");
+
+                            for episode in &title.episodes[..number] {
+                                episodes_cache.push(EpisodeCache::new(episode));
+                            }
+
+                            (
+                                BridgeMessage::PaneAction(PanelsMessage::SavingEpisode(
+                                    title_number,
+                                    episodes_cache,
+                                )),
                                 State::Ready(receiver, backend),
                             )
                         }

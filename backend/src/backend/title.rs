@@ -1,5 +1,5 @@
+use super::{episode::Episode, Backend};
 use crate::api::Data;
-use crate::backend::{episode::Episode, Backend};
 use crate::Meta;
 
 use core::fmt::Debug;
@@ -8,7 +8,8 @@ use std::{
     io::{self, Error, ErrorKind, Write},
     path::PathBuf,
 };
-use tracing::{error, info};
+use tracing::error;
+use tracing_unwrap::{OptionExt, ResultExt};
 
 #[derive(Debug)]
 pub struct Title {
@@ -39,7 +40,7 @@ impl Title {
             Err(_) => {
                 return Err(Error::new(
                     ErrorKind::Other,
-                    "[WARNING] - Invalid Directory",
+                    "[WARNING] - Invalid Directory Name",
                 ))
             }
         };
@@ -53,57 +54,62 @@ impl Title {
         })
     }
 
+    /// <b>Optimize this: Do not check is_video insted remove from list all files that fail to build an Episode.</b>
     /// Loads a list of video files as Episodes for a Title.
-    pub fn load_episodes(&mut self) {
-        // We made sure before creating this Title that the path is correct.
-        // So we can just unwrap it.
-        if self.episodes.is_empty() {
-            let paths: Vec<PathBuf> = if !self.is_loaded() {
-                info!("No metadata previously generated.");
-
+    pub fn load_episodes(&mut self, refresh: bool) {
+        if refresh || self.episodes.is_empty() {
+            let episodes: Vec<Episode> = if refresh || !self.is_loaded() {
                 let mut paths: Vec<PathBuf> = Backend::get_files(&self.path)
-                    .unwrap()
-                    .into_iter()
-                    .filter(|x| match fs::metadata(x) {
+                    .unwrap_or_log()
+                    .filter(|x| match x.metadata() {
                         Ok(f) => f.is_file(),
                         Err(_) => false,
                     })
-                    .filter(|x| match fs::read(x) {
+                    /*.filter(|x| match fs::read(x) {
                         Ok(file) => infer::is_video(&file),
                         Err(_) => false,
-                    })
+                    })*/
                     .collect();
 
-                paths.sort_by(|a, b| {
-                    alphanumeric_sort::compare_str(a.to_str().unwrap(), b.to_str().unwrap())
-                });
+                paths.sort_by(|a, b| alphanumeric_sort::compare_path(a, b));
 
                 let mut file =
-                    fs::File::create(self.path.join(".metadata").join("files.md")).unwrap();
-
-                for path in &paths {
-                    writeln!(file, "{}", path.display()).unwrap();
-                }
+                    fs::File::create(self.path.join(".metadata").join("files.md")).unwrap_or_log();
 
                 paths
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, path)| match Episode::new(&path, i + 1) {
+                        Ok(ep) => {
+                            writeln!(file, "{}", path.display()).unwrap_or_log();
+                            Some(ep)
+                        }
+                        Err(e) => {
+                            error!("{}", e);
+                            None
+                        }
+                    })
+                    .collect()
             } else {
-                let file =
-                    fs::read_to_string(self.path.join(".metadata").join("files.md")).unwrap();
+                let paths: Vec<PathBuf> =
+                    fs::read_to_string(self.path.join(".metadata").join("files.md"))
+                        .unwrap_or_log()
+                        .lines()
+                        .map(PathBuf::from)
+                        .collect();
 
-                file.lines().map(PathBuf::from).collect()
+                paths
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(i, path)| match Episode::new(&path, i + 1) {
+                        Ok(ep) => Some(ep),
+                        Err(e) => {
+                            error!("{}", e);
+                            None
+                        }
+                    })
+                    .collect()
             };
-
-            let episodes: Vec<Episode> = paths
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i, path)| match Episode::new(path, i + 1) {
-                    Ok(ep) => Some(ep),
-                    Err(e) => {
-                        error!("{}", e);
-                        None
-                    }
-                })
-                .collect();
 
             self.count = episodes.len();
             self.episodes = episodes
@@ -119,53 +125,52 @@ impl Title {
     }
 
     pub fn is_loaded(&self) -> bool {
+        let cant_episodes = match fs::read_to_string(self.path.join(".metadata").join("files.md")) {
+            Ok(paths) => paths.lines().count(),
+            Err(_) => return false,
+        };
+
         let dir = self.path.join(".metadata");
-        let mut folders: usize = 0;
+        let mut metafolders: usize = 0;
+        let mut metafiles: usize = 0;
 
         if dir.is_dir() {
-            let files: Vec<bool> = match fs::read_dir(dir) {
-                Ok(files) => files
-                    .into_iter()
-                    .flatten()
-                    .map(|file| match fs::metadata(file.path()) {
-                        Ok(f) => {
+            match fs::read_dir(dir) {
+                Ok(files) => {
+                    for file in files.flatten() {
+                        if let Ok(f) = file.metadata() {
                             if f.is_dir() {
-                                match fs::read_dir(file.path()) {
-                                    Ok(f) => {
-                                        folders += 1;
-                                        f.count() == 2
-                                    }
-                                    Err(_) => false,
-                                }
-                            } else if f.is_file() {
-                                matches!(
-                                    file.file_name().to_str().unwrap(),
-                                    "thumbnail.jpg" | "data.json" | "files.md"
-                                )
-                            } else {
-                                false
+                                metafolders += 1;
+                            } else if matches!(
+                                file.file_name().to_str().unwrap_or_log(),
+                                "thumbnail.jpg" | "data.json" | "files.md"
+                            ) {
+                                metafiles += 1;
                             }
                         }
-                        Err(_) => false,
-                    })
-                    .collect(),
-                Err(_) => vec![false],
-            };
+                    }
+                }
+                Err(_) => return false,
+            }
 
-            !files.contains(&false) && folders > 0
+            metafolders == cant_episodes && metafiles == 3
         } else {
             false
         }
     }
+
+    pub fn as_watched(&mut self, to: usize) -> io::Result<()> {
+        for episode in &mut self.episodes[..to] {
+            episode.as_watched()?
+        }
+
+        Ok(())
+    }
 }
 
 impl Meta for Title {
-    fn thumbnail(&self) -> PathBuf {
-        if let Some(data) = &self.data {
-            data.thumbnail_path.clone()
-        } else {
-            PathBuf::from("./res/no_thumbnail.jpg")
-        }
+    fn thumbnail(&self) -> Option<PathBuf> {
+        self.data.as_ref().map(|data| data.thumbnail_path.clone())
     }
 
     fn description(&self) -> String {

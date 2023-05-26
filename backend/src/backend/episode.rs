@@ -1,6 +1,6 @@
 use tracing::info;
 
-use crate::backend::{video_metadata::VideoMetadata, Backend};
+use super::{video_metadata::VideoMetadata, Backend};
 use crate::Meta;
 
 use core::fmt::Debug;
@@ -17,22 +17,20 @@ pub struct Episode {
 }
 
 impl Episode {
-    pub fn new(path: PathBuf, number: usize) -> io::Result<Episode> {
-        // It's safe to just unwrap parent(), file_name() and to_str()
-        // because we made sure befor that this path is a valid file.
-        let dir = path.parent().unwrap();
-        fs::create_dir_all(format!("{}/.metadata/episode_{number}/", dir.display()))?;
+    pub fn new(path: &PathBuf, number: usize) -> io::Result<Episode> {
+        let md_folder = format!(".metadata/episode_{number}");
+        let dir = unsafe { path.parent().unwrap_unchecked() };
+        fs::create_dir_all(format!("{}/{}", dir.display(), &md_folder))?;
 
         let mut old_md_path = path.clone();
         old_md_path.set_extension("md");
 
-        let md_path = dir
-            .join(format!(".metadata/episode_{number}/"))
-            .join(old_md_path.file_name().unwrap());
+        let md_path = unsafe {
+            dir.join(&md_folder)
+                .join(old_md_path.file_name().unwrap_unchecked())
+        };
 
-        let thumbnail_path = dir
-            .join(format!(".metadata/episode_{number}/"))
-            .join("thumbnail.jpg");
+        let thumbnail_path = dir.join(&md_folder).join("thumbnail.jpg");
 
         if fs::metadata(&md_path).is_err() {
             // Non-performant way of generating metadata
@@ -44,29 +42,46 @@ impl Episode {
 
             Backend::run_mpv(&cmd)?;*/
 
-            // The performant way
-            let cmd = if cfg!(target_os = "windows") {
-                format!("ffprobe,-v,error,-show_entries,format=duration,-of,default=noprint_wrappers=1:nokey=1,{}", 
+            // More performant way
+            /*let cmd = if cfg!(target_os = "windows") {
+                format!("ffprobe,-v,error,-show_entries,format=duration,-of,default=noprint_wrappers=1:nokey=1,{}",
                 path.display())
             } else {
-                format!("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{}\"", 
+                format!("ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{}\"",
                 path.display())
             };
 
-            let output = Backend::run_process(&cmd).unwrap();
+            let output = Backend::run_process(&cmd)?;
             let duration: f64 = String::from_utf8(output.stdout)
                 .unwrap()
                 .trim()
                 .parse()
-                .unwrap();
+                .unwrap();*/
+
+            // God help me
+            let duration: f64 = ffprobe::ffprobe(path)
+                .map_err(|_| {
+                    fs::remove_dir(format!("{}/{}", dir.display(), &md_folder)).unwrap();
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("{:?} is an invalid video", path.file_name().unwrap()),
+                    )
+                })?
+                .format
+                .get_duration()
+                .ok_or_else(|| {
+                    fs::remove_dir(format!("{}/{}", dir.display(), &md_folder)).unwrap();
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("{:?} is an invalid video", path.file_name().unwrap()),
+                    )
+                })?
+                .as_secs_f64();
 
             VideoMetadata::default_file(duration, &md_path)?;
         }
 
-        if fs::metadata(&old_md_path).is_ok() {
-            fs::rename(old_md_path, &md_path)?;
-        }
-
+        // Optimize this: Lazy initialization of thumbnails
         if fs::metadata(&thumbnail_path).is_err() {
             let cmd = if cfg!(target_os = "windows") {
                 format!(
@@ -86,11 +101,17 @@ impl Episode {
         }
 
         Ok(Episode {
-            name: path.file_name().unwrap().to_str().unwrap().to_string(),
+            name: unsafe {
+                path.file_name()
+                    .unwrap_unchecked()
+                    .to_str()
+                    .unwrap_unchecked()
+                    .to_string()
+            },
             metadata: VideoMetadata::new(&md_path)?,
             md_path,
             number,
-            path,
+            path: path.to_owned(),
             thumbnail_path,
         })
     }
@@ -102,6 +123,26 @@ impl Episode {
         fs::rename(new_md_path, &self.md_path)?;
         self.metadata = VideoMetadata::new(&self.md_path)?;
         Ok(())
+    }
+
+    pub fn as_watched(&mut self) -> io::Result<()> {
+        info!(
+            "Mark {} as {}",
+            self.name,
+            if self.metadata.watched {
+                "unwatched"
+            } else {
+                "watched"
+            }
+        );
+
+        self.metadata.watched = !self.metadata.watched;
+        self.metadata.current = if !self.metadata.watched {
+            0.0
+        } else {
+            self.metadata.duration
+        };
+        VideoMetadata::create_file(&self.metadata, &self.md_path)
     }
 
     /// Runs episode on the current time (Restart it if it has been already watched)
@@ -138,8 +179,8 @@ impl Episode {
 }
 
 impl Meta for Episode {
-    fn thumbnail(&self) -> PathBuf {
-        self.thumbnail_path.clone()
+    fn thumbnail(&self) -> Option<PathBuf> {
+        Some(self.thumbnail_path.clone())
     }
 
     fn description(&self) -> String {

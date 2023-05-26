@@ -1,4 +1,5 @@
 /.vscode
-/target
+/releases
 /series
+/target
 Cargo.lock

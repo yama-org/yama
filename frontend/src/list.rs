@@ -1,4 +1,5 @@
 use crate::theme::{self, widget::Element};
+use bridge::{BridgeMessage, FrontendMessage, PanelsMessage};
 use iced::widget::{button, pane_grid::Direction, text, Column};
 use iced::Length;
 
@@ -52,6 +53,9 @@ impl List {
         for (id, cont) in content.iter().enumerate() {
             arr.push(
                 button(text(cont).style(style(self.focused, id)))
+                    .on_press(FrontendMessage::Bridge(BridgeMessage::PaneAction(
+                        PanelsMessage::Enter,
+                    )))
                     .style(if id == self.focused {
                         theme::Button::Focused
                     } else {

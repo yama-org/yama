@@ -1,5 +1,6 @@
 use iced::widget::{button, container, pane_grid, scrollable, text};
 use iced::{application, color, Color};
+use iced_native::widget::svg;
 
 // Always import widget types from this module since it
 // uses our custom theme instead of the built-in iced::Theme.
@@ -30,6 +31,14 @@ impl application::StyleSheet for Theme {
             background_color: BACKGROUND,
             text_color: TEXT,
         }
+    }
+}
+
+impl svg::StyleSheet for Theme {
+    type Style = ();
+
+    fn appearance(&self, _style: &Self::Style) -> svg::Appearance {
+        svg::Appearance { color: Some(TEXT) }
     }
 }
 
@@ -70,6 +79,8 @@ pub enum Container {
     Unfocused,
     Focused,
     TitleBar,
+    Box,
+    Tooltip,
 }
 
 impl container::StyleSheet for Theme {
@@ -77,20 +88,33 @@ impl container::StyleSheet for Theme {
 
     fn appearance(&self, style: &Self::Style) -> container::Appearance {
         match style {
-            Container::Default => container::Appearance::default(),
+            Container::Default | Container::TitleBar => container::Appearance::default(),
             Container::Unfocused => container::Appearance {
-                border_color: UNFOCUS,
-                border_width: 2.0,
                 border_radius: 5.0,
+                border_width: 2.0,
+                border_color: UNFOCUS,
                 ..Default::default()
             },
             Container::Focused => container::Appearance {
                 border_color: FOCUS,
-                border_width: 2.0,
                 border_radius: 5.0,
+                border_width: 2.0,
                 ..Default::default()
             },
-            Container::TitleBar => container::Appearance::default(),
+            Container::Box => container::Appearance {
+                background: BACKGROUND.into(),
+                border_radius: 5.0,
+                border_width: 5.0,
+                border_color: FOCUS,
+                ..Default::default()
+            },
+            Container::Tooltip => container::Appearance {
+                background: BACKGROUND.into(),
+                border_radius: 5.0,
+                border_width: 2.0,
+                border_color: FOCUS,
+                ..Default::default()
+            },
         }
     }
 }
@@ -100,6 +124,8 @@ pub enum Button {
     Focused,
     #[default]
     Default,
+    Menu,
+    Separator,
 }
 
 impl button::StyleSheet for Theme {
@@ -112,7 +138,26 @@ impl button::StyleSheet for Theme {
                 border_radius: 5.0,
                 ..Default::default()
             },
-            Button::Default => button::Appearance::default(),
+            Button::Separator => button::Appearance {
+                border_width: 1.0,
+                border_color: FOCUS,
+                ..Default::default()
+            },
+            Button::Default | Button::Menu => button::Appearance::default(),
+        }
+    }
+
+    fn hovered(&self, style: &Self::Style) -> button::Appearance {
+        let active = self.active(style);
+
+        match style {
+            Button::Focused => button::Appearance { ..active },
+            Button::Default | Button::Separator => button::Appearance::default(),
+            Button::Menu => button::Appearance {
+                background: UNFOCUS.into(),
+                text_color: FOCUS,
+                ..active
+            },
         }
     }
 }
@@ -143,7 +188,7 @@ impl scrollable::StyleSheet for Theme {
         }
     }
 
-    fn hovered(&self, style: &Self::Style) -> scrollable::Scrollbar {
+    fn hovered(&self, style: &Self::Style, is_mouse_over_scrollbar: bool) -> scrollable::Scrollbar {
         match style {
             Scrollable::Primary => scrollable::Scrollbar {
                 background: Color::TRANSPARENT.into(),
@@ -151,7 +196,11 @@ impl scrollable::StyleSheet for Theme {
                 border_width: 1.0,
                 border_color: Color::TRANSPARENT,
                 scroller: scrollable::Scroller {
-                    color: FOCUS,
+                    color: if is_mouse_over_scrollbar {
+                        FOCUS
+                    } else {
+                        UNFOCUS
+                    },
                     border_radius: 4.0,
                     border_width: 1.0,
                     border_color: Color::TRANSPARENT,

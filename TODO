@@ -1,0 +1,11 @@
+[X] Backend config - GUI config
+[X] Refresh function, so we can reload title caches in case some chapters are missing
+[X] Mark as watched function
+[X] Mark all previous chapters watched function
+[X] Log files
+[X] Refresh, Mark and Mark all as watched buttons
+[X] Complete mouse support
+[X] Embed resources to binary
+[] Fix windows multiple cmds windows
+[] Gracefully crash
+[] Title Searcher

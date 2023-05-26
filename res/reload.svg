@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+
+<svg
+   width="400"
+   height="400"
+   viewBox="0 0 12 12"
+   version="1.1"
+   id="svg10"
+   sodipodi:docname="reload-svgrepo-com.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <defs
+     id="defs14" />
+  <sodipodi:namedview
+     id="namedview12"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="0.76986251"
+     inkscape:cx="461.77077"
+     inkscape:cy="60.400396"
+     inkscape:window-width="1870"
+     inkscape:window-height="972"
+     inkscape:window-x="20"
+     inkscape:window-y="78"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg10" />
+  <title
+     id="title2">Reload</title>
+  <g
+     id="Page-1"
+     stroke="none"
+     stroke-width="1"
+     fill="none"
+     fill-rule="evenodd"
+     transform="scale(0.49942085)">
+    <g
+       id="Reload">
+      <rect
+         id="Rectangle"
+         fill-rule="nonzero"
+         x="0"
+         y="0"
+         width="24"
+         height="24" />
+      <path
+         d="m 4,13 c 0,4.4183 3.58172,8 8,8 4.4183,0 8,-3.5817 8,-8 C 20,8.58172 16.4183,5 12,5 10.4407,5 8.98566,5.44609 7.75543,6.21762"
+         id="Path"
+         stroke="#0c0310"
+         stroke-width="2"
+         stroke-linecap="round" />
+      <path
+         d="M 9.2384,1.89795 7.49856,5.83917 C 7.27552,6.34441 7.50429,6.9348 8.00954,7.15784 l 3.94126,1.73984"
+         id="path6"
+         stroke="#0c0310"
+         stroke-width="2"
+         stroke-linecap="round" />
+    </g>
+  </g>
+  <metadata
+     id="metadata798">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>Reload</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+</svg>

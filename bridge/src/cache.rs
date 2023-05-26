@@ -31,14 +31,9 @@ impl Cache {
         self.episodes_watched[number] = title_cache.episodes_watched;
     }
 
-    pub fn set_episode_cache(
-        &mut self,
-        episode_cache: EpisodeCache,
-        title_number: usize,
-        number: usize,
-    ) {
-        self.titles_map[title_number].1[number] = episode_cache.cache;
-        self.episodes_watched[title_number][number] = episode_cache.watched;
+    pub fn set_episode_cache(&mut self, episode_cache: EpisodeCache, title_number: usize) {
+        self.titles_map[title_number].1[episode_cache.number - 1] = episode_cache.cache;
+        self.episodes_watched[title_number][episode_cache.number - 1] = episode_cache.watched;
     }
 
     pub fn cache_episodes(title: &Title) -> Vec<MetaCache> {
@@ -75,6 +70,7 @@ impl TitleCache {
 pub struct EpisodeCache {
     pub cache: MetaCache,
     pub watched: bool,
+    pub number: usize,
 }
 
 impl EpisodeCache {
@@ -82,13 +78,14 @@ impl EpisodeCache {
         EpisodeCache {
             cache: MetaCache::from(episode),
             watched: episode.metadata.watched,
+            number: episode.number,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct MetaCache {
-    pub thumbnail: PathBuf,
+    pub thumbnail: Option<PathBuf>,
     pub description: String,
 }
 
@@ -113,7 +110,7 @@ impl From<&Episode> for MetaCache {
 impl MetaCache {
     pub fn empty() -> MetaCache {
         MetaCache {
-            thumbnail: PathBuf::from("./res/no_thumbnail.jpg"),
+            thumbnail: None,
             description: "No Data".to_string(),
         }
     }

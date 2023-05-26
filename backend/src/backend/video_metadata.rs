@@ -73,4 +73,15 @@ impl VideoMetadata {
 
         file.write_all(content.as_bytes())
     }
+
+    pub fn create_file(metadata: &VideoMetadata, path: &PathBuf) -> io::Result<()> {
+        let mut file = fs::File::create(path)?;
+
+        let content = format!(
+            "Duration: {}\nCurrent: {}\nRemaining: {}\nStatus: {}",
+            metadata.duration, metadata.current, metadata.remaining, metadata.watched
+        );
+
+        file.write_all(content.as_bytes())
+    }
 }

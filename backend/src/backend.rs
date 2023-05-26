@@ -7,6 +7,7 @@ use crate::backend::title::Title;
 use crate::config::Config;
 
 use core::fmt::Debug;
+use once_cell::sync::Lazy;
 use std::{
     env, fs,
     io::{self, Error, ErrorKind},
@@ -14,29 +15,34 @@ use std::{
     process::{Command, Output},
 };
 use tracing::warn;
+use tracing_unwrap::ResultExt;
+
+static CONFIG_PATH: Lazy<PathBuf> = Lazy::new(|| {
+    confy::get_configuration_file_path("yama", "config")
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("scripts/save_info.lua")
+});
 
 #[derive(Debug)]
 pub struct Backend {
     pub titles: Vec<Title>,
     pub count: usize,
+    pub cfg: Config,
 }
 
-impl Default for Backend {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
+#[allow(clippy::new_without_default)]
 impl Backend {
     pub fn new() -> Backend {
-        //TODO: Read config from a file
-        let config = Config::new(PathBuf::from("./series")).expect("[ERROR] - Configuration file.");
-        let titles = Backend::load_titles(config)
-            .expect("[ERROR] - No valid titles inside selected folder.");
+        let config = confy::load("yama", "config").expect_or_log("[ERROR] - Configuration file.");
+        let titles = Backend::load_titles(&config)
+            .expect_or_log("[ERROR] - No valid titles inside selected folder.");
 
         Backend {
             count: titles.len(),
             titles,
+            cfg: config,
         }
     }
 
@@ -47,7 +53,7 @@ impl Backend {
             Command::new(cmd.next().unwrap())
                 .current_dir(
                     env::current_dir()
-                        .expect("[ERROR] - YAMA can not work on this invalid directory."),
+                        .expect_or_log("[ERROR] - YAMA can not work on this invalid directory."),
                 )
                 .args(cmd)
                 .output()?
@@ -55,7 +61,7 @@ impl Backend {
             Command::new("sh")
                 .current_dir(
                     env::current_dir()
-                        .expect("[ERROR] - YAMA can not work on this invalid directory."),
+                        .expect_or_log("[ERROR] - YAMA can not work on this invalid directory."),
                 )
                 .args(["-c", cmd])
                 .output()?
@@ -75,27 +81,20 @@ impl Backend {
 
     pub fn run_mpv(command: &str) -> io::Result<Output> {
         let cmd = if cfg!(target_os = "windows") {
-            format!("mpv,--script=./scripts/save_info.lua,{command}")
+            format!("mpv,--script={},{command}", CONFIG_PATH.display())
         } else {
-            format!("mpv --script=./scripts/save_info.lua {command}")
+            format!("mpv --script={} {command}", CONFIG_PATH.display())
         };
 
         Backend::run_process(&cmd)
     }
 
-    fn get_files(path: &PathBuf) -> io::Result<Vec<PathBuf>> {
-        let files: Vec<PathBuf> = fs::read_dir(path)?
-            .into_iter()
-            .flatten()
-            .map(|x| x.path())
-            .collect();
-
-        Ok(files)
+    fn get_files(path: &PathBuf) -> io::Result<impl Iterator<Item = PathBuf>> {
+        Ok(fs::read_dir(path)?.flatten().map(|x| x.path()))
     }
 
-    fn load_titles(config: Config) -> io::Result<Vec<Title>> {
+    fn load_titles(config: &Config) -> io::Result<Vec<Title>> {
         let mut series: Vec<Title> = Backend::get_files(&config.series_path)?
-            .into_iter()
             .filter(|x| match fs::metadata(x) {
                 Ok(f) => f.is_dir(),
                 Err(_) => false,
@@ -104,7 +103,6 @@ impl Backend {
             .collect();
 
         series.sort_by(|a, b| alphanumeric_sort::compare_str(&a.name, &b.name));
-
         Ok(series)
     }
 

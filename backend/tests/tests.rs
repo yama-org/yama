@@ -39,7 +39,7 @@ fn open_episode() {
     let mut backend = Backend::new();
     let title = &mut backend.titles[0];
 
-    title.load_episodes();
+    title.load_episodes(false);
     let ep = &mut title.episodes[0];
 
     let command = format!(

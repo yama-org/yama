@@ -5,7 +5,7 @@ pub mod config;
 use std::{fmt::Debug, path::PathBuf};
 
 pub trait Meta {
-    fn thumbnail(&self) -> PathBuf;
+    fn thumbnail(&self) -> Option<PathBuf>;
     fn description(&self) -> String;
 }
 

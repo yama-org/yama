@@ -327,10 +327,10 @@ fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
 
     match key_code {
         // Bridge Messages
-        KeyCode::Up | KeyCode::J => Some(Message::Bridge(BridgeMessage::PaneAction(
+        KeyCode::Up | KeyCode::K => Some(Message::Bridge(BridgeMessage::PaneAction(
             PanelsMessage::FocusItem(Direction::Up),
         ))),
-        KeyCode::Down | KeyCode::K => Some(Message::Bridge(BridgeMessage::PaneAction(
+        KeyCode::Down | KeyCode::J => Some(Message::Bridge(BridgeMessage::PaneAction(
             PanelsMessage::FocusItem(Direction::Down),
         ))),
         KeyCode::Right | KeyCode::L => Some(Message::Bridge(BridgeMessage::PaneAction(

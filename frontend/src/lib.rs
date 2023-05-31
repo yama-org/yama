@@ -345,7 +345,7 @@ fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
         KeyCode::R => Some(Message::Bridge(BridgeMessage::PaneAction(
             PanelsMessage::Refresh,
         ))),
-        KeyCode::W => Some(Message::Bridge(BridgeMessage::PaneAction(
+        KeyCode::W | KeyCode::Space => Some(Message::Bridge(BridgeMessage::PaneAction(
             PanelsMessage::MarkEpisode,
         ))),
 
@@ -373,8 +373,11 @@ fn handle_mousewheel(delta: mouse::ScrollDelta) -> Option<Message> {
 
 fn handle_mousebutton(button: mouse::Button) -> Option<Message> {
     match button {
-        mouse::Button::Right => Some(Message::Bridge(BridgeMessage::PaneAction(
-            PanelsMessage::Back,
+        mouse::Button::Right | mouse::Button::Other(8) => Some(Message::Bridge(
+            BridgeMessage::PaneAction(PanelsMessage::Back),
+        )),
+        mouse::Button::Other(9) => Some(Message::Bridge(BridgeMessage::PaneAction(
+            PanelsMessage::Enter,
         ))),
         _ => None,
     }

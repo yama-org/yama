@@ -85,13 +85,13 @@ impl Episode {
         if fs::metadata(&thumbnail_path).is_err() {
             let cmd = if cfg!(target_os = "windows") {
                 format!(
-                    "ffmpeg,-i,{},-vf,thumbnail,-frames:v,1,{},-f,mjpeg",
+                    "ffmpeg,-i,{},-vf,thumbnail,-frames:v,1,{},-f,mjpeg,-hide_banner,-nostdin,-nostats,-loglevel,quiet",
                     path.display(),
                     thumbnail_path.display(),
                 )
             } else {
                 format!(
-                    "ffmpeg -i \"{}\" -vf \"thumbnail\" -frames:v 1 \"{}\" -f mjpeg",
+                    "ffmpeg -i \"{}\" -vf \"thumbnail\" -frames:v 1 \"{}\" -f mjpeg -hide_banner -nostdin -nostats -loglevel quiet",
                     path.display(),
                     thumbnail_path.display(),
                 )

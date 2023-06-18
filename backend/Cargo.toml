@@ -1,6 +1,6 @@
 [package]
 name = "backend"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Agustin Marcelo Marco Bacigalupo <01marcoagustin@gmail.com>"]
 license = "MIT"
@@ -10,7 +10,7 @@ alphanumeric-sort = "1"
 confy = { workspace = true }
 ffprobe = "0.3.3"
 iced = { workspace = true}
-infer = { version = "0", default-features = false }
+# infer = { version = "0", default-features = false }
 once_cell = { workspace = true }
 reqwest = { version = "0", features = ["rustls-tls"] }
 serde = { version = "1", features = ["derive"] }

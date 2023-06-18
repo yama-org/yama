@@ -6,6 +6,13 @@
 [X] Refresh, Mark and Mark all as watched buttons
 [X] Complete mouse support
 [X] Embed resources to binary
-[] Fix windows multiple cmds windows
+[X] Fix windows multiple cmds windows
+[X] Add icon for windows
+[] Enhance UI
+    [] Set thumbnail to a fixed height
+[] Improve mouse and keyboard support (fix mousewheel not moving when the cursor is on top of the list and adding [page-up/down, home/end] keybindings)
 [] Gracefully crash
+
+After 1.0:
 [] Title Searcher
+[] More title information (voice actors, etc)

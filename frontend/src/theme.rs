@@ -140,7 +140,7 @@ impl button::StyleSheet for Theme {
             },
             Button::Separator => button::Appearance {
                 border_width: 1.0,
-                border_color: FOCUS,
+                border_color: TEXT,
                 ..Default::default()
             },
             Button::Default | Button::Menu => button::Appearance::default(),

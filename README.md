@@ -6,14 +6,12 @@ Yama will automatically organize your local animes, displaying them in a neatly 
 
 ![Yama episodes screenshot](./docs/readme_resources/yama_episodes_screenshot.png)
 
-<br/><br/>
 
 ## Index:
 - [Usage](#usage)
 - [Config](#config-paths)
 - [Dependencies](#dependencies)
 
-<br/><br/>
 
 ## Usage:
 
@@ -38,7 +36,6 @@ You will also have these three functions for easy of use:
 - Mark as watched: To quickly mark an episode as watched.
 - Mark all previous as watched: To mark all episodes before the current one selected as watched.
 
-<br/><br/>
 
 ## Config paths:
 - Linuxs: $HOME/.config/yama
@@ -46,14 +43,11 @@ You will also have these three functions for easy of use:
 
 > If any errors occurred while using yama you can generate a new issue with the output of the last log file located in the config folder.
 
-<br/><br/>
 
 ## Dependencies:
 
 Yama requires **ffmpeg** and **mpv** to work, for linux users you can install it with your packet manager, but for windows users there is a dependencies.ps1 script in the [Release](https://github.com/sad-ko/yama/releases) zip, it will download both programs and add it to the users Path.
 
-<br/><br/>
-<br/><br/>
 
 <p align="center">
     <img src="./docs/readme_resources/about_screenshot.png" alt="About">

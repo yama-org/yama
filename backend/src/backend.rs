@@ -47,36 +47,56 @@ impl Backend {
     }
 
     pub fn run_process(cmd: &str) -> io::Result<Output> {
-        let output = if cfg!(target_os = "windows") {
-            let mut cmd = cmd.split(',');
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
 
-            Command::new(cmd.next().unwrap())
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            //const DETACHED_PROCESS: u32 = 0x00000008;
+
+            let mut cmd = cmd.split(',');
+            let output = Command::new(cmd.next().unwrap())
                 .current_dir(
                     env::current_dir()
                         .expect_or_log("[ERROR] - YAMA can not work on this invalid directory."),
                 )
                 .args(cmd)
-                .output()?
-        } else {
-            Command::new("sh")
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()?;
+
+            if !output.status.success() {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    format!("[ERROR] - Exit code failure.\n{}", unsafe {
+                        String::from_utf8_unchecked(output.stderr)
+                    }),
+                ));
+            }
+
+            Ok(output)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let output = Command::new("sh")
                 .current_dir(
                     env::current_dir()
                         .expect_or_log("[ERROR] - YAMA can not work on this invalid directory."),
                 )
                 .args(["-c", cmd])
-                .output()?
-        };
+                .output()?;
 
-        if !output.status.success() {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("[ERROR] - Exit code failure.\n{}", unsafe {
-                    String::from_utf8_unchecked(output.stderr)
-                }),
-            ));
+            if !output.status.success() {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    format!("[ERROR] - Exit code failure.\n{}", unsafe {
+                        String::from_utf8_unchecked(output.stderr)
+                    }),
+                ));
+            }
+
+            Ok(output)
         }
-
-        Ok(output)
     }
 
     pub fn run_mpv(command: &str) -> io::Result<Output> {

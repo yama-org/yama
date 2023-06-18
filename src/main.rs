@@ -5,9 +5,31 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 use tracing_unwrap::ResultExt;
 
+#[cfg(target_os = "windows")]
+use windows::{
+    core::PCWSTR,
+    Win32::{
+        System::LibraryLoader::GetModuleHandleW,
+        UI::WindowsAndMessaging::{LoadImageW, IMAGE_ICON, LR_DEFAULTSIZE},
+    },
+};
+
 static SAVEINFO_LUA: &[u8] = include_bytes!("../scripts/save_info.lua");
 
 pub fn main() -> frontend::Result {
+    #[cfg(target_os = "windows")]
+    let _icon = unsafe {
+        LoadImageW(
+            GetModuleHandleW(None).expect("[ERROR] - Windows icon"),
+            PCWSTR(1 as _), // Value must match the `nameID` in the .rc script
+            IMAGE_ICON,
+            0,
+            0,
+            LR_DEFAULTSIZE,
+        )
+    }
+    .expect("[ERROR] - Windows icon");
+
     setup();
     info!("Starting up yama...");
 

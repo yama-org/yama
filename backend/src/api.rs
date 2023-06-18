@@ -266,13 +266,7 @@ impl Data {
     }
 
     fn clean_description(&mut self) -> &mut Self {
-        self.media.description = self
-            .media
-            .description
-            .lines()
-            .next()
-            .unwrap()
-            .replace("<br>", "");
+        self.media.description = self.media.description.replace("<br>", "");
         self
     }
 

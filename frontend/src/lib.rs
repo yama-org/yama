@@ -18,14 +18,14 @@ use iced::widget::{button, canvas, column, container, image, pane_grid::Directio
 use iced::{alignment, executor, keyboard, mouse, window};
 use iced::{Application, Command, Length, Settings, Subscription};
 use iced_native::{event, subscription, Event};
-use rodio::{OutputStream, OutputStreamHandle, Sink};
+//use rodio::{OutputStream, OutputStreamHandle, Sink};
 use tracing_unwrap::ResultExt;
 
 pub type Result = std::result::Result<(), iced::Error>;
 
-static YAMA_ICON: &[u8] = include_bytes!("../../res/yama_icon.ico");
+static YAMA_ICON: &[u8] = include_bytes!("../../res/yama_logo.ico");
 static YAMA_PNG: &[u8] = include_bytes!("../../res/yama.png");
-static YAMA_WAV: &[u8] = include_bytes!("../../res/hai_yama.wav");
+//static YAMA_WAV: &[u8] = include_bytes!("../../res/hai_yama.wav");
 
 #[derive(Debug)]
 pub enum State {
@@ -35,7 +35,7 @@ pub enum State {
     ShowMenu(MenuBar),
 }
 
-struct Sound {
+/*struct Sound {
     _stream: OutputStream,
     _handle: OutputStreamHandle,
     sink: Sink,
@@ -45,7 +45,7 @@ impl std::fmt::Debug for Sound {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Sound Debug")
     }
-}
+}*/
 
 #[derive(Debug)]
 pub struct GUI {
@@ -53,7 +53,7 @@ pub struct GUI {
     pane: Option<Pane>,
     loading: LoadingCircle,
     cfg: backend::config::Config,
-    sound: Sound,
+    //sound: Sound,
 }
 
 impl GUI {
@@ -62,7 +62,8 @@ impl GUI {
             id: None,
             antialiasing: true,
             window: window::Settings {
-                size: (1920, 1080),
+                size: (1600, 900),
+                position: window::Position::Centered,
                 icon: Some(window::icon::from_file_data(YAMA_ICON, None).unwrap_or_log()),
                 ..window::Settings::default()
             },
@@ -79,7 +80,7 @@ impl Application for GUI {
     type Flags = ();
 
     fn new(_: Self::Flags) -> (Self, Command<Message>) {
-        let (_stream, handle) = rodio::OutputStream::try_default().unwrap_or_log();
+        /*let (_stream, handle) = rodio::OutputStream::try_default().unwrap_or_log();
         let sink = rodio::Sink::try_new(&handle).unwrap_or_log();
         sink.set_volume(0.5);
 
@@ -87,11 +88,11 @@ impl Application for GUI {
             _stream,
             _handle: handle,
             sink,
-        };
+        };*/
 
         (
             GUI {
-                sound,
+                //sound,
                 state: State::Loading,
                 loading: LoadingCircle::new(),
                 pane: None,
@@ -102,7 +103,7 @@ impl Application for GUI {
     }
 
     fn title(&self) -> String {
-        String::from("YAMA")
+        String::from("yama")
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
@@ -200,11 +201,11 @@ impl Application for GUI {
     }
 
     fn view(&self) -> Element<Message> {
-        let font_size = Settings::<()>::default().default_text_size;
+        //let font_size = Settings::<()>::default().default_text_size;
 
-        let title = text("Y.A.M.A - Your Anime Manager Automata")
-            .size(font_size + 4.0)
-            .vertical_alignment(alignment::Vertical::Center);
+        /*let title = text("Y.A.M.A - Your Anime Manager Automata")
+        .size(font_size + 4.0)
+        .vertical_alignment(alignment::Vertical::Center);*/
 
         let pane_view = if let Some(pane) = &self.pane {
             pane.view()
@@ -222,12 +223,12 @@ impl Application for GUI {
                         .on_press(Message::MenuBar(MenuBar::About))
                         .style(theme::Button::Menu),
                 ],
-                button(text(" ").size(0))
-                    .padding(0)
-                    .style(theme::Button::Separator)
-                    .width(Length::Fill)
-                    .height(Length::Fixed(0.0)),
-                title,
+                /*button(text(" ").size(0))
+                .padding(0)
+                .style(theme::Button::Separator)
+                .width(Length::Fill)
+                .height(Length::Fixed(1.0)),*/
+                //title,
                 pane_view,
             ]
             .spacing(10),
@@ -297,10 +298,10 @@ impl Application for GUI {
 
                     MenuBar::Yama => {
                         //let file = std::fs::File::open("./res/hai_yama.wav").unwrap_or_log();
-                        let sound_file = std::io::Cursor::new(YAMA_WAV);
+                        /*let sound_file = std::io::Cursor::new(YAMA_WAV);
                         self.sound
                             .sink
-                            .append(rodio::Decoder::new(sound_file).unwrap_or_log());
+                            .append(rodio::Decoder::new(sound_file).unwrap_or_log());*/
 
                         let img = image::Handle::from_memory(YAMA_PNG);
                         container(image::Image::new(img))

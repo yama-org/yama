@@ -1,6 +1,6 @@
 [package]
 name = "frontend"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Agustin Marcelo Marco Bacigalupo <01marcoagustin@gmail.com>"]
 license = "MIT"
@@ -9,7 +9,7 @@ license = "MIT"
 bridge = { path = "../bridge" }
 backend = { path = "../backend" }
 confy = { workspace = true }
-rodio = { version = "0.17", features = ["wav"] }
+# rodio = { version = "0.17", features = ["wav"] }
 iced = { workspace = true}
 iced_native = "0"
 iced_lazy = "0"

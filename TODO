@@ -8,11 +8,31 @@
 [X] Embed resources to binary
 [X] Fix windows multiple cmds windows
 [X] Add icon for windows
-[] Enhance UI
-    [] Set thumbnail to a fixed height
-[] Improve mouse and keyboard support (fix mousewheel not moving when the cursor is on top of the list and adding [page-up/down, home/end] keybindings)
-[] Gracefully crash
 
-After 1.0:
+- For 0.7.0:
+[] Refactoring:
+    [X] Better Error Handling (use anyhow insted of tracing-unwrap)
+    [] Improve HTTP Client (hyper insted of reqwest)
+    [] Use tokio::watch for reading changes in the config file
+    [X] Reduce memory usage and binary size
+    [X] Documentation
+[] Enhance UI:
+    [] Set thumbnail to a fixed height
+    [] Rich text for descriptions
+    [] Better distinction between "Titles"/"Episodes" and the titles/episodes names
+    [?] Custom themes
+[] Fix mousewheel not moving when the cursor is on top of the list
+[] Adding [page-up/down, home/end] keybindings
+[X] Gracefully crash
+
+- For 0.8.0:
+[?] More title information (voice actors, etc)
+[] Pop-up windows on first launch to ask for series directory
 [] Title Searcher
-[] More title information (voice actors, etc)
+[] Discord support
+
+- For 0.9.0:
+[] Streaming Lobby
+
+- For 1.0.0:
+[] Crunchyroll support

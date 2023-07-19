@@ -1,8 +1,13 @@
-use core::fmt::Debug;
-use std::io::Write;
-use std::{fs, io, path::PathBuf};
+use crate::Result;
 
-#[derive(Debug, Clone, Copy)]
+use core::fmt::Debug;
+use serde::{Deserialize, Serialize};
+use std::io::Write;
+use std::{fs, path::PathBuf};
+
+/// [`Episode`][crate::Episode] information. Serialized for easy parsing.
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]
+#[serde(rename_all = "PascalCase")]
 pub struct VideoMetadata {
     pub duration: f64,
     pub current: f64,
@@ -11,77 +16,63 @@ pub struct VideoMetadata {
 }
 
 impl VideoMetadata {
-    pub fn new(path: &PathBuf) -> io::Result<VideoMetadata> {
+    /// Creates a new [`VideoMetadata`][VideoMetadata] from a [`PathBuf`][PathBuf].
+    ///
+    /// The _path_ should point to a valid _.md_ json-formatted file.
+    pub fn new(path: &PathBuf) -> Result<VideoMetadata> {
         let metadata = fs::read_to_string(path)?;
+        Ok(serde_json::from_str(&metadata)?)
+    }
 
-        let mut duration = 0.0;
-        let mut current: f64 = 0.0;
-        let mut remaining = 0.0;
-        let mut watched = false;
+    /// Formats a [f64] value to a XX:YY time format.
+    /// Where X: Minutes and Y: Seconds.
+    fn format_time(time: f64) -> Box<str> {
+        let minutes = (time / 60.0).trunc();
+        let seconds = (((time / 60.0) - minutes) * 60.0).floor();
+        format!("{minutes:02.0}:{seconds:02.0}").into_boxed_str()
+    }
 
-        for line in metadata.lines() {
-            if line.contains("Duration") {
-                duration = line
-                    .replace("Duration:", "")
-                    .trim()
-                    .parse()
-                    .unwrap_or_default();
-            } else if line.contains("Current") {
-                current = line
-                    .replace("Current:", "")
-                    .trim()
-                    .parse()
-                    .unwrap_or_default();
-            } else if line.contains("Remaining") {
-                remaining = line
-                    .replace("Remaining:", "")
-                    .trim()
-                    .parse()
-                    .unwrap_or_default();
-            } else if line.contains("Status") {
-                watched = line
-                    .replace("Status:", "")
-                    .trim()
-                    .parse()
-                    .unwrap_or_default();
-            }
-        }
+    /// Formats [`VideoMetadata`][VideoMetadata] into a pretty [`str`][str].
+    pub fn to_str(&self) -> Box<str> {
+        format!(
+            "Duration: {}{}\nWatched: {}",
+            Self::format_time(self.duration),
+            if !self.watched && self.current > 1.0 {
+                format!("\nCurrent: {}", Self::format_time(self.current))
+            } else {
+                String::new()
+            },
+            if self.watched { "Yes" } else { "No" }
+        )
+        .into_boxed_str()
+    }
 
-        if current < 1.0 {
-            current = 0.0;
-        }
-
-        Ok(VideoMetadata {
+    /// Creates a valid _.md_ json-formatted file, with a default [`VideoMetadata`][VideoMetadata]
+    /// to the referenced _path_.
+    ///
+    /// The only altered value is the _duration_ of the video.
+    pub fn default_file(duration: f64, path: &PathBuf) -> Result<()> {
+        let mut file = fs::File::create(path)?;
+        let vm = VideoMetadata {
             duration,
-            current,
-            remaining,
-            watched,
-        })
+            ..Default::default()
+        };
+
+        let parsed = serde_json::to_string(&vm)?;
+        Ok(file.write_all(parsed.as_bytes())?)
     }
 
-    pub fn to_time(duration: f64) -> String {
-        let minutes = (duration / 60.0).trunc();
-        let seconds = (((duration / 60.0) - minutes) * 60.0).floor();
-        format!("{minutes:02.0}:{seconds:02.0}")
-    }
-
-    pub fn default_file(duration: f64, path: &PathBuf) -> io::Result<()> {
+    /// Creates a valid _.md_ json-formatted file, from the [`VideoMetadata`][VideoMetadata]
+    /// passed to the referenced _path_.
+    pub fn create_file(metadata: &VideoMetadata, path: &PathBuf) -> Result<()> {
         let mut file = fs::File::create(path)?;
-
-        let content =
-            format!("Duration: {duration}\nCurrent: 0.00\nRemaining: 0.00\nStatus: false");
-
-        file.write_all(content.as_bytes())
+        let parsed = serde_json::to_string(metadata)?;
+        Ok(file.write_all(parsed.as_bytes())?)
     }
 
-    pub fn create_file(metadata: &VideoMetadata, path: &PathBuf) -> io::Result<()> {
-        let mut file = fs::File::create(path)?;
-
-        let content = format!(
-            "Duration: {}\nCurrent: {}\nRemaining: {}\nStatus: {}",
-            metadata.duration, metadata.current, metadata.remaining, metadata.watched
-        );
-
-        file.write_all(content.as_bytes())
+    /// Marks the [`VideoMetadata`][VideoMetadata] as watched or not.
+    pub fn as_watched(&mut self) {
+        self.watched = !self.watched;
+        self.current = if !self.watched { 0.0 } else { self.duration }
     }
 }

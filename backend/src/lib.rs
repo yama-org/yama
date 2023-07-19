@@ -1,16 +1,13 @@
-pub mod api;
-pub mod backend;
-pub mod config;
+mod backend;
+mod config;
+mod networking;
 
-use std::{fmt::Debug, path::PathBuf};
+pub use self::config::Config;
+pub use backend::episode::Episode;
+pub use backend::meta::Meta;
+pub use backend::title::Title;
+pub use backend::video_metadata::VideoMetadata;
+pub use backend::Backend;
+pub use networking::anilist::Anilist;
 
-pub trait Meta {
-    fn thumbnail(&self) -> Option<PathBuf>;
-    fn description(&self) -> String;
-}
-
-impl Debug for dyn Meta {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Meta")
-    }
-}
+pub type Result<T> = anyhow::Result<T>;

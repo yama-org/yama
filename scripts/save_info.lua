@@ -1,16 +1,26 @@
 local mp = require 'mp'
+require 'mp.options'
+
+local options = {
+    min_time = 10.0,
+}
+read_options(options, "save_info")
+local min_time = options.min_time
 
 function on_unload()
     local filename = string.format("%s.%s", mp.get_property("path"):gsub("(.*)%..*$","%1"), "md")
     local file = io.open(filename, "w")
     local remaining = mp.get_property("time-remaining")
-    local status = tostring(tonumber(remaining) < 10.0)
+    local watched = tonumber(remaining) < min_time
+    local current = watched and "0.00" or tostring(mp.get_property("time-pos"))
 
-    file:write("Duration: ", mp.get_property("duration"), "\n")
-    file:write("Current: ", mp.get_property("time-pos"), "\n")
-    file:write("Remaining: ", remaining, "\n")
-    file:write("Status: ", status, "\n")
-    
+    file:write("{\n")
+    file:write("\t\"Duration\": ", mp.get_property("duration"), ",\n")
+    file:write("\t\"Current\": ", current, ",\n")
+    file:write("\t\"Remaining\": ", remaining, ",\n")
+    file:write("\t\"Watched\": ", tostring(watched), "\n")
+    file:write("}")
+
     file:close(file)
 end
 

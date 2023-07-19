@@ -1,3 +1,6 @@
+use crate::backend::title::Title as BTitle;
+use crate::Result;
+use anyhow::bail;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -32,9 +35,7 @@ query ($search: String) {
 }
 "#;
 
-type Result<T> = std::result::Result<T, Error>;
-
-pub struct Api {
+pub struct Anilist {
     client: Client,
 }
 
@@ -90,65 +91,15 @@ pub struct Node {
     pub name: String,
 }
 
-#[derive(Debug)]
-pub enum ErrorKind {
-    Request(reqwest::Error),
-    Parse(serde_json::Error),
-    File(std::io::Error),
-}
-
-#[derive(Debug)]
-pub struct Error {
-    kind: ErrorKind,
-    title: String,
-}
-
-impl Error {
-    pub fn new(kind: ErrorKind, title: &str) -> Error {
-        Error {
-            kind,
-            title: title.to_string(),
-        }
+impl Default for Anilist {
+    fn default() -> Anilist {
+        Anilist::new()
     }
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self.kind {
-            ErrorKind::Request(_) => write!(f, "Could not get requested data for: {}", self.title),
-            ErrorKind::Parse(_) => write!(f, "Could not parse data for: {}", self.title),
-            ErrorKind::File(_) => write!(f, "Could not create file for: {}", self.title),
-        }
-    }
-}
-
-impl From<reqwest::Error> for ErrorKind {
-    fn from(err: reqwest::Error) -> ErrorKind {
-        ErrorKind::Request(err)
-    }
-}
-
-impl From<serde_json::Error> for ErrorKind {
-    fn from(err: serde_json::Error) -> ErrorKind {
-        ErrorKind::Parse(err)
-    }
-}
-
-impl From<std::io::Error> for ErrorKind {
-    fn from(err: std::io::Error) -> ErrorKind {
-        ErrorKind::File(err)
-    }
-}
-
-impl Default for Api {
-    fn default() -> Api {
-        Api::new()
-    }
-}
-
-impl Api {
-    pub fn new() -> Api {
-        Api {
+impl Anilist {
+    pub fn new() -> Anilist {
+        Anilist {
             client: Client::new(),
         }
     }
@@ -157,24 +108,17 @@ impl Api {
         let json = json!({"query": QUERY, "variables": {"search": search}});
         let resp = self
             .client
-            .post("https://graphql.anilist.co/")
+            .post("https://graphql.anilist.co/") //BUT WHY IS IT POST???, I must move to hyper as soon as i can!
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .body(json.to_string())
             .send()
-            .await
-            .map_err(|e| Error::new(e.into(), search))?
+            .await?
             .text()
-            .await
-            .map_err(|e| Error::new(e.into(), search))?;
+            .await?;
 
-        info!("Data downloaded for: {}", search);
-
-        let result: Query =
-            serde_json::from_str(&resp).map_err(|e| Error::new(e.into(), search))?;
-
-        std::fs::write(path.join(".metadata").join("data.json"), resp)
-            .map_err(|e| Error::new(e.into(), search))?;
+        let result: Query = serde_json::from_str(&resp)?;
+        std::fs::write(path.join(".metadata").join("data.json"), resp)?;
 
         let data = result.data.download_image(self, path);
         let mut data = data.await?;
@@ -185,12 +129,10 @@ impl Api {
         Ok(data)
     }
 
-    fn cached_query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
-        let content = std::fs::read_to_string(path.join(".metadata").join("data.json"))
-            .map_err(|e| Error::new(e.into(), search))?;
+    fn cached_query(&self, path: &Path, id: usize) -> Result<Data> {
+        let content = std::fs::read_to_string(path.join(".metadata").join("data.json"))?;
 
-        let result: Query =
-            serde_json::from_str(&content).map_err(|e| Error::new(e.into(), search))?;
+        let result: Query = serde_json::from_str(&content)?;
 
         let mut data = result.data;
         data.set_id(id);
@@ -201,54 +143,54 @@ impl Api {
         Ok(data)
     }
 
-    pub async fn try_query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
-        match std::fs::read_dir(path.join(".metadata")) {
-            Ok(files) => {
-                let files: Vec<OsString> = files
-                    .into_iter()
-                    .flatten()
-                    .map(|file| file.file_name())
-                    .collect();
-                if files.contains(&OsString::from("thumbnail.jpg"))
-                    && files.contains(&OsString::from("data.json"))
-                {
-                    self.cached_query(path, search, id)
-                } else {
-                    self.query(path, search, id).await
-                }
+    pub async fn try_query(&self, title: &mut BTitle, id: usize) -> Result<()> {
+        let path = title.path.as_path();
+        let search = &title.name;
+
+        if let Ok(files) = std::fs::read_dir(path.join(".metadata")) {
+            let files: Vec<OsString> = files
+                .into_iter()
+                .flatten()
+                .map(|file| file.file_name())
+                .collect();
+
+            let was_downloaded = files.contains(&OsString::from("thumbnail.jpg"))
+                && files.contains(&OsString::from("data.json"));
+
+            title.data = if was_downloaded {
+                self.cached_query(path, id)
+            } else {
+                self.query(path, search, id).await
             }
-            Err(_) => self.query(path, search, id).await,
+            .ok();
+        }
+
+        match title.data {
+            Some(_) => Ok(()),
+            None => bail!("Failed query of: {}", search),
         }
     }
 
     async fn download_image(&self, url: &str) -> Result<reqwest::Response> {
-        let res = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| Error::new(e.into(), url))?;
+        let res = self.client.get(url).send().await?;
         Ok(res)
     }
 }
 
 impl Data {
-    async fn download_image(mut self, api: &Api, path: &Path) -> Result<Data> {
+    async fn download_image(mut self, api: &Anilist, path: &Path) -> Result<Data> {
         let bytes = api
             .download_image(&self.media.banner_image)
             .await?
             .bytes()
-            .await
-            .map_err(|e| Error::new(e.into(), &self.media.title.english))?;
+            .await?;
 
         info!("Image downloaded for: {}", self.media.title.english);
 
         let name_file = path.join(".metadata").join("thumbnail.jpg");
 
-        let mut file = std::fs::File::create(&name_file)
-            .map_err(|e| Error::new(e.into(), &self.media.title.english))?;
-        file.write_all(&bytes)
-            .map_err(|e| Error::new(e.into(), &self.media.title.english))?;
+        let mut file = std::fs::File::create(&name_file)?;
+        file.write_all(&bytes)?;
 
         self.set_thumbnail_path(name_file);
 

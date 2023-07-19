@@ -1,6 +1,6 @@
+use iced::widget::svg;
 use iced::widget::{button, container, pane_grid, scrollable, text};
 use iced::{application, color, Color};
-use iced_native::widget::svg;
 
 // Always import widget types from this module since it
 // uses our custom theme instead of the built-in iced::Theme.
@@ -8,7 +8,7 @@ use iced_native::widget::svg;
 // expects use of iced::Theme by default.
 pub mod widget {
     #![allow(dead_code)]
-    use crate::theme::Theme;
+    use super::Theme;
 
     pub type Renderer = iced::Renderer<Theme>;
     pub type Element<'a, Message> = iced::Element<'a, Message, Renderer>;

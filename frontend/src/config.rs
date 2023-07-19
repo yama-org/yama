@@ -1,20 +1,22 @@
 use std::format;
 
-use crate::theme::{self, widget::Element};
-use backend::config::Config;
+use crate::widgets::theme::{self, widget::Element};
+
+use backend::Config;
 use bridge::FrontendMessage;
+
+use iced::widget::svg;
 use iced::widget::{button, column, row, text};
 use iced::{alignment, Length};
-use iced_native::widget::svg;
+//use iced_native::widget::svg;
 use tracing::{info, warn};
-use tracing_unwrap::ResultExt;
 
-static FOLDER_SVG: &[u8] = include_bytes!("../../res/folder.svg");
+static FOLDER_SVG: &[u8] = include_bytes!("../../res/svgs/folder.svg");
 
 pub struct GUIConfig;
 
 impl GUIConfig {
-    pub fn view<'a>(cfg: &Config) -> Element<'a, super::Message> {
+    pub fn view<'a>(cfg: &Config) -> Element<'a, FrontendMessage> {
         let folder_path = format!("{}", cfg.series_path.display());
         let folder_svg = svg(svg::Handle::from_memory(FOLDER_SVG))
             .width(Length::Fixed(25.0))
@@ -41,7 +43,7 @@ impl GUIConfig {
     }
 
     pub fn file_dialog(cfg: &mut Config) {
-        let path = std::env::current_dir().unwrap_or_log();
+        let path = std::env::current_dir().unwrap();
         let res = rfd::FileDialog::new().set_directory(path).pick_folder();
         info!("The user choose: {:#?}", res);
 

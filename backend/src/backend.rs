@@ -1,120 +1,66 @@
 pub mod episode;
+pub mod meta;
 pub mod title;
 pub mod video_metadata;
 
-use crate::api::Data;
-use crate::backend::title::Title;
-use crate::config::Config;
+use crate::Config;
+use crate::Result;
+use crate::Title;
 
+use anyhow::bail;
 use core::fmt::Debug;
 use once_cell::sync::Lazy;
+use std::sync::Arc;
 use std::{
     env, fs,
-    io::{self, Error, ErrorKind},
     path::PathBuf,
     process::{Command, Output},
 };
 use tracing::warn;
-use tracing_unwrap::ResultExt;
 
-static CONFIG_PATH: Lazy<PathBuf> = Lazy::new(|| {
+static SCRIPT_PATH: Lazy<PathBuf> = Lazy::new(|| {
     confy::get_configuration_file_path("yama", "config")
-        .unwrap()
+        .expect("[ERROR] - No configuration path found.")
         .parent()
-        .unwrap()
+        .expect("[ERROR] - No valid configuration path found.")
         .join("scripts/save_info.lua")
 });
 
+/// [yama's] Backend, contains all the [`Titles`][Title] and utils to run this application.
+///
+/// _So, did you do some good deeds?_
 #[derive(Debug)]
 pub struct Backend {
     pub titles: Vec<Title>,
+    /// Number of [`titles`][Title] this [`Backend`][Backend] has.
     pub count: usize,
-    pub cfg: Config,
+    title_cache: Arc<[Arc<str>]>,
 }
 
-#[allow(clippy::new_without_default)]
 impl Backend {
-    pub fn new() -> Backend {
-        let config = confy::load("yama", "config").expect_or_log("[ERROR] - Configuration file.");
-        let titles = Backend::load_titles(&config)
-            .expect_or_log("[ERROR] - No valid titles inside selected folder.");
+    /// Creates a new [`Backend`][Backend] instance, it will find all the [`titles`][Title]
+    /// in the folder specified in the [`Config`][Config] file, and download their [metadata]
+    /// with [`Anilist`][crate::Anilist] API.
+    pub async fn new() -> Result<Self> {
+        let mut titles = Self::load_titles()?;
+        Self::download_titles_data(titles.as_mut_slice()).await;
 
-        Backend {
+        Ok(Self {
+            title_cache: titles
+                .iter()
+                .map(|t| match &t.data {
+                    Some(data) => data.media.title.english.as_str().into(),
+                    None => t.name.clone(),
+                })
+                .collect(),
             count: titles.len(),
             titles,
-            cfg: config,
-        }
+        })
     }
 
-    pub fn run_process(cmd: &str) -> io::Result<Output> {
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            //const DETACHED_PROCESS: u32 = 0x00000008;
-
-            let mut cmd = cmd.split(',');
-            let output = Command::new(cmd.next().unwrap())
-                .current_dir(
-                    env::current_dir()
-                        .expect_or_log("[ERROR] - YAMA can not work on this invalid directory."),
-                )
-                .args(cmd)
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()?;
-
-            if !output.status.success() {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    format!("[ERROR] - Exit code failure.\n{}", unsafe {
-                        String::from_utf8_unchecked(output.stderr)
-                    }),
-                ));
-            }
-
-            Ok(output)
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let output = Command::new("sh")
-                .current_dir(
-                    env::current_dir()
-                        .expect_or_log("[ERROR] - YAMA can not work on this invalid directory."),
-                )
-                .args(["-c", cmd])
-                .output()?;
-
-            if !output.status.success() {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    format!("[ERROR] - Exit code failure.\n{}", unsafe {
-                        String::from_utf8_unchecked(output.stderr)
-                    }),
-                ));
-            }
-
-            Ok(output)
-        }
-    }
-
-    pub fn run_mpv(command: &str) -> io::Result<Output> {
-        let cmd = if cfg!(target_os = "windows") {
-            format!("mpv,--script={},{command}", CONFIG_PATH.display())
-        } else {
-            format!("mpv --script={} {command}", CONFIG_PATH.display())
-        };
-
-        Backend::run_process(&cmd)
-    }
-
-    fn get_files(path: &PathBuf) -> io::Result<impl Iterator<Item = PathBuf>> {
-        Ok(fs::read_dir(path)?.flatten().map(|x| x.path()))
-    }
-
-    fn load_titles(config: &Config) -> io::Result<Vec<Title>> {
-        let mut series: Vec<Title> = Backend::get_files(&config.series_path)?
+    fn load_titles() -> Result<Vec<Title>> {
+        let cfg: Config = confy::load("yama", "config")?;
+        let mut series: Vec<Title> = Self::get_files(&cfg.series_path)?
             .filter(|x| match fs::metadata(x) {
                 Ok(f) => f.is_dir(),
                 Err(_) => false,
@@ -126,27 +72,22 @@ impl Backend {
         Ok(series)
     }
 
-    pub async fn download_title_data(&self) -> Vec<Data> {
-        use crate::api::Api;
+    async fn download_titles_data(titles: &mut [Title]) {
+        use crate::Anilist;
         use iced::futures::future;
 
-        let api = Api::default();
+        let api = Anilist::default();
 
-        let data_fut: Vec<_> = self
-            .titles
-            .iter()
+        let mut futs: Vec<_> = titles
+            .iter_mut()
             .enumerate()
-            .map(|(id, t)| api.try_query(&t.path, &t.name, id))
+            .map(|(id, t)| api.try_query(t, id))
             .map(Box::pin)
             .collect();
 
-        let mut rc = Vec::with_capacity(data_fut.len());
-        let mut futs = data_fut;
-
         while !futs.is_empty() {
             match future::select_all(futs).await {
-                (Ok(data), _, remaining) => {
-                    rc.push(data);
+                (Ok(_), _, remaining) => {
                     futs = remaining;
                 }
                 (Err(e), _, remaining) => {
@@ -155,11 +96,128 @@ impl Backend {
                 }
             }
         }
-
-        rc
     }
 
-    pub fn view(&self) -> Vec<String> {
-        self.titles.iter().map(|t| t.name.clone()).collect()
+    /// **[`Backend`][Backend] util:** Runs a secondary process given by a command.
+    /// (Windows and Linux compatibility only!)
+    pub fn run_process(cmd: &str) -> Result<Output> {
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            //const DETACHED_PROCESS: u32 = 0x00000008;
+
+            let mut cmd = cmd.split(',');
+            let output = Command::new(cmd.next().unwrap())
+                .current_dir(env::current_dir()?)
+                .args(cmd)
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .map_err(|e| Error::new(e.into(), cmd))?;
+
+            if !output.status.success() {
+                bail!("Command failed: {}", String::from_utf8(output.stdout)?);
+            }
+
+            Ok(output)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let output = Command::new("sh")
+                .current_dir(env::current_dir()?)
+                .args(["-c", cmd])
+                .output()?;
+
+            if !output.status.success() {
+                bail!("Command failed: {}", String::from_utf8(output.stdout)?);
+            }
+
+            Ok(output)
+        }
+    }
+
+    /// **[`Backend`][Backend] util:** Runs an instance of mpv with the given command.
+    /// The [`Episode`][crate::Episode] and it's starting time should be passes as a command.
+    pub fn run_mpv(command: &str) -> Result<Output> {
+        let cfg: Config = confy::load("yama", "config")?;
+
+        let cmd = if cfg!(target_os = "windows") {
+            format!(
+                "mpv,--script={},{},{command}",
+                SCRIPT_PATH.display(),
+                cfg.min_time
+            )
+        } else {
+            format!(
+                "mpv --script={}  --script-opts=save_info-min_time={} {command}",
+                SCRIPT_PATH.display(),
+                cfg.min_time
+            )
+        };
+
+        Backend::run_process(&cmd)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    /// **(Linux Version) [`Backend`][Backend] util:** Returns an [`Iterator`][Iterator] with all the _(non-hidden)_ paths inside a given directory.
+    fn get_files(path: &PathBuf) -> Result<impl Iterator<Item = PathBuf>> {
+        Ok(fs::read_dir(path)?
+            .flatten()
+            .filter_map(|x| match x.path().file_name() {
+                Some(filename) => {
+                    if !filename.to_str()?.starts_with('.') {
+                        Some(x.path())
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            }))
+    }
+
+    #[cfg(target_os = "windows")]
+    /// **(Windows Version) [`Backend`][Backend] util:** Returns an [`Iterator`][Iterator] with all the _(non-hidden)_ paths inside a given directory.
+    fn get_files(path: &PathBuf) -> Result<impl Iterator<Item = PathBuf>> {
+        use std::os::windows::fs::MetadataExt;
+
+        Ok(fs::read_dir(path)?
+            .flatten()
+            .filter_map(|x| match x.metadata() {
+                Ok(metadata) => {
+                    if (metadata.file_attributes() & 0x2) > 0 {
+                        Some(x.path())
+                    } else {
+                        None
+                    }
+                }
+                Err(_) => None,
+            }))
+    }
+
+    /// Returns the specified [`Episode`][crate::Episode] or [`None`][None] if it doesn't exist.
+    pub fn get_episode(
+        &mut self,
+        title_number: usize,
+        episode_number: usize,
+    ) -> Option<&mut crate::Episode> {
+        self.titles
+            .get_mut(title_number)?
+            .get_episode(episode_number)
+    }
+
+    /// Returns a copy of the [`Titles`][Title] names to be shared with the [frontend] thread.
+    pub fn cache(&self) -> Arc<[Arc<str>]> {
+        self.title_cache.clone()
+    }
+
+    /// Takes a closure, applies it to the [`Titles`][Title] vector
+    /// and returns a [`Vec`][Vec] with the results.
+    pub fn map<F, T>(&self, f: F) -> Vec<T>
+    where
+        F: Fn(&Title) -> T,
+    {
+        self.titles.iter().map(f).collect()
     }
 }

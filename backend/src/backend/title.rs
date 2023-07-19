@@ -1,131 +1,58 @@
-use super::{episode::Episode, Backend};
-use crate::api::Data;
-use crate::Meta;
+use crate::Result;
+use crate::networking::anilist::Data;
+use crate::{Backend, Episode};
 
 use core::fmt::Debug;
-use std::{
-    fs,
-    io::{self, Error, ErrorKind, Write},
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf, sync::Arc};
+use anyhow::bail;
 use tracing::error;
-use tracing_unwrap::{OptionExt, ResultExt};
 
+/// Contains all the information necessary to display a title in [yama].
 #[derive(Debug)]
 pub struct Title {
-    pub path: PathBuf,
-    pub name: String,
+    /// Number of [`episodes`][Episode] this [`Title`][Title] has.
+    pub count: u16,
+    pub name: Arc<str>,
+    /// [Metadata] of this [`Title`][Title],
     pub data: Option<Data>,
-    pub episodes: Vec<Episode>,
-    pub count: usize,
+    pub episodes: Option<Vec<Episode>>,
+    episodes_cache: Option<Arc<[Arc<str>]>>,
+    pub path: PathBuf,
 }
 
 impl Title {
-    pub fn new(path: PathBuf) -> io::Result<Title> {
-        fs::metadata(&path)?; // We check if the dir is valid
+    /// Creates a new [`Title`][Title] for the folder specified by the _path_,
+    ///
+    /// If it returns an [`Error`][Error] then it's not a valid folder.
+    pub fn new(path: PathBuf) -> Result<Title> {
+        if !path.is_dir() {
+            bail!("The path {} is not a valid folder.", path.display());
+        }
+
+        // Now we are sure is a valid path, so...
+        let name = Arc::from(unsafe {
+            path.file_name()
+                .unwrap_unchecked()
+                .to_str()
+                .unwrap_unchecked()
+        });
+
         fs::create_dir_all(format!("{}/.metadata/", path.display()))?;
 
-        let name = match path.file_name() {
-            Some(path) => path.to_owned(),
-            None => {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "[WARNING] - Invalid Directory",
-                ))
-            }
-        };
-
-        let name = match name.into_string() {
-            Ok(name) => name,
-            Err(_) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "[WARNING] - Invalid Directory Name",
-                ))
-            }
-        };
-
         Ok(Title {
-            path,
             name,
-            data: None,
-            episodes: Vec::new(),
+            path,
             count: 0,
+            data: None,
+            episodes: None,
+            episodes_cache: None,
         })
     }
 
-    /// <b>Optimize this: Do not check is_video insted remove from list all files that fail to build an Episode.</b>
-    /// Loads a list of video files as Episodes for a Title.
-    pub fn load_episodes(&mut self, refresh: bool) {
-        if refresh || self.episodes.is_empty() {
-            let episodes: Vec<Episode> = if refresh || !self.is_loaded() {
-                let mut paths: Vec<PathBuf> = Backend::get_files(&self.path)
-                    .unwrap_or_log()
-                    .filter(|x| match x.metadata() {
-                        Ok(f) => f.is_file(),
-                        Err(_) => false,
-                    })
-                    /*.filter(|x| match fs::read(x) {
-                        Ok(file) => infer::is_video(&file),
-                        Err(_) => false,
-                    })*/
-                    .collect();
-
-                paths.sort_by(|a, b| alphanumeric_sort::compare_path(a, b));
-
-                let mut file =
-                    fs::File::create(self.path.join(".metadata").join("files.md")).unwrap_or_log();
-
-                paths
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(|(i, path)| match Episode::new(&path, i + 1) {
-                        Ok(ep) => {
-                            writeln!(file, "{}", path.display()).unwrap_or_log();
-                            Some(ep)
-                        }
-                        Err(e) => {
-                            error!("{}", e);
-                            None
-                        }
-                    })
-                    .collect()
-            } else {
-                let paths: Vec<PathBuf> =
-                    fs::read_to_string(self.path.join(".metadata").join("files.md"))
-                        .unwrap_or_log()
-                        .lines()
-                        .map(PathBuf::from)
-                        .collect();
-
-                paths
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(|(i, path)| match Episode::new(&path, i + 1) {
-                        Ok(ep) => Some(ep),
-                        Err(e) => {
-                            error!("{}", e);
-                            None
-                        }
-                    })
-                    .collect()
-            };
-
-            self.count = episodes.len();
-            self.episodes = episodes
-        }
-    }
-
-    pub fn view(&self) -> Vec<String> {
-        self.episodes.iter().map(|e| e.name.clone()).collect()
-    }
-
-    pub fn get_episode(&self, number: usize) -> &Episode {
-        &self.episodes[number]
-    }
-
-    pub fn is_loaded(&self) -> bool {
-        let cant_episodes = match fs::read_to_string(self.path.join(".metadata").join("files.md")) {
+    #[allow(dead_code)]
+    /// Checks if this [`Title`][Title] was properly loaded or its missing some meta-files.
+    fn is_loaded(&self) -> bool {
+        let cant_episodes = match fs::read_to_string(self.path.join(".metadata/files.md")) {
             Ok(paths) => paths.lines().count(),
             Err(_) => return false,
         };
@@ -134,53 +61,150 @@ impl Title {
         let mut metafolders: usize = 0;
         let mut metafiles: usize = 0;
 
-        if dir.is_dir() {
-            match fs::read_dir(dir) {
-                Ok(files) => {
-                    for file in files.flatten() {
-                        if let Ok(f) = file.metadata() {
-                            if f.is_dir() {
-                                metafolders += 1;
-                            } else if matches!(
-                                file.file_name().to_str().unwrap_or_log(),
-                                "thumbnail.jpg" | "data.json" | "files.md"
-                            ) {
-                                metafiles += 1;
-                            }
+        match fs::read_dir(dir) {
+            Ok(files) => {
+                for file in files.flatten() {
+                    if let Ok(f) = file.metadata() {
+                        if f.is_dir() {
+                            metafolders += 1;
+                        } else if matches!(
+                            file.file_name().to_str().unwrap(),
+                            "thumbnail.jpg" | "data.json" | "files.md"
+                        ) {
+                            metafiles += 1;
                         }
                     }
                 }
-                Err(_) => return false,
             }
-
-            metafolders == cant_episodes && metafiles == 3
-        } else {
-            false
+            Err(_) => return false,
         }
+
+        metafolders == cant_episodes && metafiles == 3
     }
 
-    pub fn as_watched(&mut self, to: usize) -> io::Result<()> {
-        for episode in &mut self.episodes[..to] {
-            episode.as_watched()?
+    /// **Asynchronously** loads a list of video files as [`Episode`][Episode] for this [`Title`][Title].
+    /// With a _refresh_ option to force the reloading of the [`Episode`][Episode] list.
+    pub async fn load_episodes(&mut self, refresh: bool) -> Result<()> {
+        use iced::futures::future;
+
+        if refresh || self.episodes.is_none() {
+            let episodes: Vec<Episode> = {
+                let mut paths: Vec<PathBuf> = Backend::get_files(&self.path)?
+                    .filter(|x| match x.metadata() {
+                        Ok(f) => f.is_file(),
+                        Err(_) => false,
+                    })
+                    .collect();
+
+                //let files = self.path.join(".metadata/files.md");
+                //let mut file = fs::File::create(files)?;
+                paths.sort_by(|a, b| alphanumeric_sort::compare_path(a, b));
+
+                let mut episodes = Vec::with_capacity(paths.len());
+                let mut futs: Vec<_> = paths
+                    .iter()
+                    .enumerate()
+                    .map(|(i, path)| Episode::new(path, i as u16))
+                    .map(Box::pin)
+                    .collect();
+
+                while !futs.is_empty() {
+                    match future::select_all(futs).await {
+                        (Ok(ep), _, remaining) => {
+                            //writeln!(file, "{}", ep.path.display())?;
+                            episodes.push(ep);
+                            futs = remaining;
+                        }
+                        (Err(e), _, remaining) => {
+                            error!("{e}");
+                            futs = remaining;
+                        }
+                    }
+                }
+
+                episodes.sort_by(|a, b| a.number.cmp(&b.number));
+                episodes = episodes
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, ep)| ep.change_number(idx))
+                    .collect();
+                episodes
+            }; /*else {
+                   let paths: Vec<PathBuf> = fs::read_to_string(self.path.join(".metadata/files.md"))?
+                       .lines()
+                       .map(PathBuf::from)
+                       .collect();
+
+                   let mut episodes = Vec::with_capacity(paths.len());
+                   let mut futs: Vec<_> = paths
+                       .iter()
+                       .enumerate()
+                       .map(|(i, path)| Episode::new(path, i as u16))
+                       .map(Box::pin)
+                       .collect();
+
+                   while !futs.is_empty() {
+                       match future::select_all(futs).await {
+                           (Ok(ep), _, remaining) => {
+                               episodes.push(ep);
+                               futs = remaining;
+                           }
+                           (Err(e), _, remaining) => {
+                               error!("{e}");
+                               futs = remaining;
+                           }
+                       }
+                   }
+
+                   episodes.sort_by(|a, b| alphanumeric_sort::compare_str(&a.name, &b.name));
+                   episodes
+               };*/
+
+            self.count = episodes.len() as u16;
+            self.episodes_cache = Some(episodes.iter().map(|e| e.name.clone()).collect());
+            self.episodes = Some(episodes)
         }
 
         Ok(())
     }
-}
 
-impl Meta for Title {
-    fn thumbnail(&self) -> Option<PathBuf> {
-        self.data.as_ref().map(|data| data.thumbnail_path.clone())
+    /// Returns a copy of this title [`Episodes`][Episode] names to be shared with the [frontend] thread.
+    pub fn cache(&self) -> Arc<[Arc<str>]> {
+        match &self.episodes_cache {
+            Some(episodes_cache) => episodes_cache.clone(),
+            None => Arc::from([Arc::from("")]),
+        }
     }
 
-    fn description(&self) -> String {
-        if let Some(data) = &self.data {
-            format!(
-                "{}\n\nDescription: {}\n\nGenres: {:?}\n\nStudio: {}",
-                data.media.title.english, data.media.description, data.media.genres, data.studio
-            )
-        } else {
-            "No Data".to_string()
+    /// Takes a closure, applies it to this title [`Episodes`][Episode] vector
+    /// and returns a [`Vec`][Vec] with the results.
+    ///
+    /// If this title [`Episodes`][Episode] vector is empty it will return an empty [`Vec`][Vec].
+    pub fn map<F, T>(&self, f: F) -> Vec<T>
+    where
+        F: Fn(&Episode) -> T,
+    {
+        match &self.episodes {
+            Some(episodes) => episodes.iter().map(f).collect(),
+            None => Vec::new(),
         }
+    }
+
+    /// Returns the specified [`Episode`][Episode] or [`None`][None] if it doesn't exist.
+    pub fn get_episode(&mut self, number: usize) -> Option<&mut Episode> {
+        self.episodes.as_mut()?.get_mut(number)
+    }
+
+    /// Marks all previous [`Episodes`][Episode] of this title [`Episode`][Episode] as watched or not.
+    pub fn as_watched(&mut self, to: usize) -> Result<()> {
+        if let Some(episodes_vec) = self.episodes.as_mut() {
+            if let Some(episodes_slice) = episodes_vec.get_mut(..to) {
+                for episode in episodes_slice {
+                    episode.as_watched()?
+                }
+            }
+        }
+
+        Ok(())
     }
 }

@@ -5,11 +5,7 @@ edition = "2021"
 authors = ["Agustin Marcelo Marco Bacigalupo <01marcoagustin@gmail.com>"]
 license = "MIT"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-iced = { workspace = true}
+iced = { workspace = true }
 backend = { path = "../backend" }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-tracing-unwrap = { workspace = true }

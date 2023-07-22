@@ -5,6 +5,7 @@ mod pointer;
 use self::inner_data::{FocusedType, InnerData};
 use self::inner_panel::{InnerPanel, SCROLLABLE_ID};
 
+use crate::embedded::*;
 use crate::frontend::State;
 use crate::widgets::{theme, Element};
 
@@ -16,11 +17,6 @@ use iced::widget::pane_grid::{self, Direction, PaneGrid};
 use iced::widget::{button, row, scrollable, svg, text, tooltip};
 use iced::{Command, Length, Settings};
 use std::vec;
-
-static RELOAD_SVG: &[u8] = include_bytes!("../../../res/svgs/reload.svg");
-static CHECKMARK_SVG: &[u8] = include_bytes!("../../../res/svgs/checkmark.svg");
-static CHECKMARK_P_SVG: &[u8] = include_bytes!("../../../res/svgs/checkmark_previous.svg");
-static NO_TUMBNAIL: &[u8] = include_bytes!("../../../res/no_thumbnail.jpg");
 
 #[derive(Debug)]
 pub struct Panels {
@@ -49,6 +45,25 @@ impl Panels {
         }
     }
 
+    fn next(&mut self, mut y: f32) -> Command<FrontendMessage> {
+        //Fixes top items being cut-out
+        if y > 0.1 {
+            //Fixes bottom items being cut-out
+            y += 1.0 / Settings::<()>::default().default_text_size;
+        }
+
+        let metadata = self.data.get_metacache();
+
+        if let Some(adj) = self.panes.adjacent(&self.focus, Direction::Right) {
+            *self.panes.get_mut(&adj).unwrap() = InnerPanel::Metadata(metadata);
+        }
+
+        scrollable::snap_to(
+            SCROLLABLE_ID.clone(),
+            scrollable::RelativeOffset { x: 0.0, y },
+        )
+    }
+
     pub fn update(&mut self, message: Message, state: &mut State) -> Command<FrontendMessage> {
         match message {
             Message::EpisodesLoaded(title_number, title_cache) => {
@@ -65,23 +80,28 @@ impl Panels {
             }
 
             Message::FocusItem(direction) => {
-                let mut y = self.data.update(direction);
-                //Fixes top items being cut-out
-                if y > 0.1 {
-                    //Fixes bottom items being cut-out
-                    y += 1.0 / Settings::<()>::default().default_text_size;
-                }
+                let y = self.data.update(direction);
+                return self.next(y);
+            }
 
-                let metadata = self.data.get_metacache();
+            Message::JumpTo(to) => {
+                let y = self.data.jump_to(to);
+                return self.next(y);
+            }
 
-                if let Some(adj) = self.panes.adjacent(&self.focus, Direction::Right) {
-                    *self.panes.get_mut(&adj).unwrap() = InnerPanel::Metadata(metadata);
-                }
+            Message::Plus(to_add) => {
+                let y = self.data.plus(to_add);
+                return self.next(y);
+            }
 
-                return scrollable::snap_to(
-                    SCROLLABLE_ID.clone(),
-                    scrollable::RelativeOffset { x: 0.0, y },
-                );
+            Message::Start => {
+                let y = self.data.start();
+                return self.next(y);
+            }
+
+            Message::End => {
+                let y = self.data.end();
+                return self.next(y);
             }
 
             Message::Enter => match self.data.get_type() {
@@ -100,21 +120,24 @@ impl Panels {
                 }
             },
 
-            Message::Refresh => {
-                if let FocusedType::Episode(title_number, _) = self.data.get_type() {
-                    *state = State::Loading;
-                    let _ = self
-                        .sender
-                        .try_send(BackendMessage::LoadEpisodes(title_number, true));
-                }
-            }
-
             Message::Back => {
                 self.data.back();
 
                 if let Some(adj) = self.panes.adjacent(&self.focus, Direction::Right) {
                     let metadata = self.data.get_metacache();
                     *self.panes.get_mut(&adj).unwrap() = InnerPanel::Metadata(metadata);
+                }
+
+                *self.panes.get_mut(&self.focus).unwrap() =
+                    InnerPanel::Listdata(FocusedType::Title(self.data.focused));
+            }
+
+            Message::Refresh => {
+                if let FocusedType::Episode(title_number, _) = self.data.get_type() {
+                    *state = State::Loading;
+                    let _ = self
+                        .sender
+                        .try_send(BackendMessage::LoadEpisodes(title_number, true));
                 }
             }
 
@@ -165,60 +188,87 @@ impl Panels {
                 theme::Container::Unfocused
             });
 
-            match self.data.get_type() {
-                FocusedType::Title(_) => {
-                    let title_bar = pane_grid::TitleBar::new("Titles").padding(10);
-                    content.title_bar(title_bar)
+            if let InnerPanel::Listdata(focused_type) = pane {
+                match focused_type {
+                    FocusedType::Title(_) => {
+                        let title_bar = pane_grid::TitleBar::new(
+                            row![
+                                text("Titles")
+                                    .font(crate::embedded::BOLD_FONT)
+                                    .size(26)
+                                    .width(Length::Fill),
+                                button(
+                                    svg(svg::Handle::from_memory(EMPTY_SVG))
+                                        .width(Length::Fixed(25.0))
+                                        .height(Length::Fixed(25.0))
+                                )
+                            ]
+                            .align_items(iced::Alignment::Center)
+                            .width(Length::Fill),
+                        )
+                        .padding(15);
+                        content.title_bar(title_bar)
+                    }
+
+                    FocusedType::Episode(_, _) => {
+                        let svg_size = 25.0;
+
+                        let reload_svg = svg(svg::Handle::from_memory(RELOAD_SVG))
+                            .width(Length::Fixed(svg_size))
+                            .height(Length::Fixed(svg_size));
+
+                        let checkmark_svg = svg(svg::Handle::from_memory(CHECKMARK_SVG))
+                            .width(Length::Fixed(svg_size))
+                            .height(Length::Fixed(svg_size));
+
+                        let checkmark_previous_svg = svg(svg::Handle::from_memory(CHECKMARK_P_SVG))
+                            .width(Length::Fixed(svg_size))
+                            .height(Length::Fixed(svg_size));
+
+                        let title_bar = pane_grid::TitleBar::new(
+                            row![
+                                text("Episodes")
+                                    .font(crate::embedded::BOLD_FONT)
+                                    .size(26)
+                                    .width(Length::Fill),
+                                tooltip(
+                                    button(reload_svg)
+                                        .on_press(FrontendMessage::PaneAction(Message::Refresh))
+                                        .style(theme::Button::Menu),
+                                    "Refresh current title",
+                                    tooltip::Position::Top,
+                                )
+                                .style(theme::Container::Tooltip),
+                                tooltip(
+                                    button(checkmark_svg)
+                                        .on_press(FrontendMessage::PaneAction(Message::MarkEpisode))
+                                        .style(theme::Button::Menu),
+                                    "Mark episode as watched",
+                                    tooltip::Position::Top,
+                                )
+                                .style(theme::Container::Tooltip),
+                                tooltip(
+                                    button(checkmark_previous_svg)
+                                        .on_press(FrontendMessage::PaneAction(
+                                            Message::MarkPreviousEpisodes
+                                        ))
+                                        .style(theme::Button::Menu),
+                                    "Mark previous episodes as watched",
+                                    tooltip::Position::Top,
+                                )
+                                .style(theme::Container::Tooltip),
+                            ]
+                            .align_items(iced::Alignment::Center)
+                            .width(Length::Fill),
+                        )
+                        .padding(15);
+
+                        content.title_bar(title_bar)
+                    }
                 }
-                FocusedType::Episode(_, _) => {
-                    let reload_svg = svg(svg::Handle::from_memory(RELOAD_SVG))
-                        .width(Length::Fixed(25.0))
-                        .height(Length::Fixed(25.0));
-
-                    let checkmark_svg = svg(svg::Handle::from_memory(CHECKMARK_SVG))
-                        .width(Length::Fixed(25.0))
-                        .height(Length::Fixed(25.0));
-
-                    let checkmark_previous_svg = svg(svg::Handle::from_memory(CHECKMARK_P_SVG))
-                        .width(Length::Fixed(25.0))
-                        .height(Length::Fixed(25.0));
-
-                    let title_bar = pane_grid::TitleBar::new(
-                        row![
-                            text("Episodes").width(Length::Fill),
-                            tooltip(
-                                button(reload_svg)
-                                    .on_press(FrontendMessage::PaneAction(Message::Refresh))
-                                    .style(theme::Button::Menu),
-                                "Refresh current title",
-                                tooltip::Position::Top,
-                            )
-                            .style(theme::Container::Tooltip),
-                            tooltip(
-                                button(checkmark_svg)
-                                    .on_press(FrontendMessage::PaneAction(Message::MarkEpisode))
-                                    .style(theme::Button::Menu),
-                                "Mark episode as watched",
-                                tooltip::Position::Top,
-                            )
-                            .style(theme::Container::Tooltip),
-                            tooltip(
-                                button(checkmark_previous_svg)
-                                    .on_press(FrontendMessage::PaneAction(
-                                        Message::MarkPreviousEpisodes
-                                    ))
-                                    .style(theme::Button::Menu),
-                                "Mark previous episodes as watched",
-                                tooltip::Position::Top,
-                            )
-                            .style(theme::Container::Tooltip),
-                        ]
-                        .align_items(iced::Alignment::Center)
-                        .width(Length::Fill),
-                    )
-                    .padding(10);
-                    content.title_bar(title_bar)
-                }
+            } else {
+                let title_bar = pane_grid::TitleBar::new("");
+                content.title_bar(title_bar)
             }
         })
         .on_resize(10, |r| FrontendMessage::PaneAction(Message::Resized(r)))

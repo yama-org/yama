@@ -125,7 +125,6 @@ pub enum Button {
     #[default]
     Default,
     Menu,
-    Separator,
 }
 
 impl button::StyleSheet for Theme {
@@ -138,11 +137,6 @@ impl button::StyleSheet for Theme {
                 border_radius: 5.0,
                 ..Default::default()
             },
-            Button::Separator => button::Appearance {
-                border_width: 1.0,
-                border_color: TEXT,
-                ..Default::default()
-            },
             Button::Default | Button::Menu => button::Appearance::default(),
         }
     }
@@ -152,7 +146,7 @@ impl button::StyleSheet for Theme {
 
         match style {
             Button::Focused => button::Appearance { ..active },
-            Button::Default | Button::Separator => button::Appearance::default(),
+            Button::Default => button::Appearance::default(),
             Button::Menu => button::Appearance {
                 background: UNFOCUS.into(),
                 text_color: FOCUS,

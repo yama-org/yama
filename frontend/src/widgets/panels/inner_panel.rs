@@ -2,9 +2,10 @@ use super::{FocusedType, InnerData};
 
 use crate::widgets::Element;
 
+use backend::MetaType;
 use bridge::{cache::*, FrontendMessage};
 
-use iced::widget::{column, container, image, scrollable, text};
+use iced::widget::{column as col, container, image, scrollable, text};
 use iced::Length;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
@@ -23,47 +24,45 @@ impl InnerPanel {
     pub fn view<'a>(&self, data: &InnerData) -> Element<'a, FrontendMessage> {
         match self {
             Self::Listdata(ftype) => match ftype {
-                FocusedType::Title(_) => container(
-                    scrollable(data.view())
-                        .height(Length::Shrink)
-                        .id(SCROLLABLE_ID.clone()),
-                )
-                .width(Length::Fill)
-                .padding(5)
-                .center_y()
-                .into(),
+                FocusedType::Title(_) => {
+                    container(scrollable(data.view()).id(SCROLLABLE_ID.clone()))
+                        .width(Length::Fill)
+                        .padding(15)
+                        .center_y()
+                        .into()
+                }
 
-                FocusedType::Episode(_, _) => container(
-                    scrollable(data.view())
-                        .height(Length::Shrink)
-                        .id(SCROLLABLE_ID.clone()),
-                )
-                .width(Length::Fill)
-                .padding(5)
-                .center_y()
-                .into(),
+                FocusedType::Episode(_, _) => {
+                    container(scrollable(data.view()).id(SCROLLABLE_ID.clone()))
+                        .width(Length::Fill)
+                        .padding(15)
+                        .center_y()
+                        .into()
+                }
             },
 
             Self::Metadata(meta) => {
-                let font = iced::Font::External {
-                    name: "Kumbh Sans Bold",
-                    bytes: include_bytes!("../../../../res/fonts/KumbhSans-Bold.ttf"),
-                };
-
                 let handle = match &meta.thumbnail {
                     Some(path) => image::Handle::from_path(path.as_ref()),
-                    None => image::Handle::from_memory(super::NO_TUMBNAIL),
+                    None => image::Handle::from_memory(crate::embedded::NO_TUMBNAIL),
+                };
+
+                let thumbnail = match meta.mtype {
+                    MetaType::Title => container(
+                        scrollable(image::Image::new(handle)).height(Length::Fixed(167.0)),
+                    ),
+                    MetaType::Episode => container(image::Image::new(handle)),
                 };
 
                 container(scrollable(
-                    column![
-                        image::Image::new(handle),
-                        text(meta.description.clone()).font(font)
+                    col![
+                        thumbnail,
+                        text(meta.title.clone()).font(crate::embedded::BOLD_FONT),
+                        text(meta.description.clone())
                     ]
-                    .spacing(10),
+                    .spacing(20),
                 ))
                 .width(Length::Fill)
-                .height(Length::Fill)
                 .padding(15)
                 .into()
             }

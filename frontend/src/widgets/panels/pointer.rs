@@ -1,4 +1,4 @@
-use crate::widgets::{theme, Element};
+use crate::widgets::{mouse_area, theme, Element};
 
 use bridge::{FrontendMessage, PanelAction};
 
@@ -40,6 +40,38 @@ impl Pointer {
         }
     }
 
+    pub fn jump_to(&mut self, to: usize) -> f32 {
+        if to < self.size {
+            self.focused = to;
+            (1.0 / self.size as f32) * self.focused as f32
+        } else {
+            0.0
+        }
+    }
+
+    pub fn plus(&mut self, to_add: isize) -> f32 {
+        let mut to_add = to_add + self.focused as isize;
+        to_add %= self.size as isize;
+
+        if to_add < 0 {
+            self.focused = self.size.saturating_add_signed(to_add);
+        } else {
+            self.focused = to_add as usize;
+        }
+
+        (1.0 / self.size as f32) * self.focused as f32
+    }
+
+    pub fn start(&mut self) -> f32 {
+        self.focused = 0;
+        (1.0 / self.size as f32) * self.focused as f32
+    }
+
+    pub fn end(&mut self) -> f32 {
+        self.focused = self.size - 1;
+        (1.0 / self.size as f32) * self.focused as f32
+    }
+
     fn increment(&mut self) {
         self.focused = match self.focused == 0 {
             true => self.size - 1,
@@ -71,15 +103,18 @@ impl Pointer {
 
         for (id, cont) in content.iter().enumerate() {
             arr.push(
-                button(text(cont).style(style_text(self.focused, id)))
-                    .on_press(FrontendMessage::PaneAction(PanelAction::Enter))
-                    .style(if id == self.focused {
-                        theme::Button::Focused
-                    } else {
-                        theme::Button::Default
-                    })
-                    .width(Length::Fill)
-                    .into(),
+                mouse_area(
+                    button(text(cont).style(style_text(self.focused, id)))
+                        .on_press(FrontendMessage::PaneAction(PanelAction::Enter))
+                        .style(if id == self.focused {
+                            theme::Button::Focused
+                        } else {
+                            theme::Button::Default
+                        })
+                        .width(Length::Fill),
+                )
+                .on_area(FrontendMessage::PaneAction(PanelAction::JumpTo(id)))
+                .into(),
             );
         }
 

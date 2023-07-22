@@ -1,19 +1,15 @@
 use crate::config::GUIConfig;
 use crate::widgets::*;
-use crate::Result;
+use crate::{keybindings, Result};
 
 use backend::Config;
 use bridge::{FrontendMessage as Message, MenuBar, PanelAction};
 
-use iced::widget::{button, canvas, column, container, image, pane_grid::Direction, row, text};
+use iced::widget::{button, canvas, column, container, pane_grid::Direction, row, text};
 use iced::{alignment, executor, keyboard, mouse, window};
 use iced::{event, subscription, Event};
 use iced::{Application, Command, Length, Settings, Subscription};
-//use iced_native::{event, subscription, Event};
 use tracing::error;
-
-static YAMA_ICON: &[u8] = include_bytes!("../../res/yama_logo.ico");
-static YAMA_PNG: &[u8] = include_bytes!("../../res/yama.png");
 
 #[derive(Debug)]
 pub enum State {
@@ -39,10 +35,13 @@ impl Frontend {
             window: window::Settings {
                 size: (1600, 900),
                 position: window::Position::Centered,
-                icon: Some(window::icon::from_file_data(YAMA_ICON, None)?),
+                icon: Some(window::icon::from_file_data(
+                    crate::embedded::YAMA_ICON,
+                    None,
+                )?),
                 ..window::Settings::default()
             },
-            default_font: Some(include_bytes!("../../res/fonts/KumbhSans-Regular.ttf")),
+            default_font: Some(crate::embedded::REGULAR_FONT_BYTES),
             ..Settings::default()
         })?)
     }
@@ -94,6 +93,7 @@ impl Application for Frontend {
                 }
                 _ => (),
             },
+
             _ => {
                 if let Some(pane) = &mut self.pane {
                     if let Message::PaneAction(message) = message {
@@ -138,7 +138,11 @@ impl Application for Frontend {
 
                     match event {
                         Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
-                            handle_mousewheel(delta)
+                            keybindings::handle_mousewheel(delta)
+                        }
+
+                        Event::Mouse(mouse::Event::ButtonPressed(button)) => {
+                            keybindings::handle_mousebutton(button)
                         }
 
                         Event::Keyboard(keyboard::Event::KeyPressed {
@@ -151,11 +155,7 @@ impl Application for Frontend {
                         Event::Keyboard(keyboard::Event::KeyPressed {
                             key_code,
                             modifiers: _,
-                        }) => handle_hotkey(key_code),
-
-                        Event::Mouse(mouse::Event::ButtonPressed(button)) => {
-                            handle_mousebutton(button)
-                        }
+                        }) => keybindings::handle_hotkey(key_code),
 
                         _ => None,
                     }
@@ -167,12 +167,6 @@ impl Application for Frontend {
     }
 
     fn view(&self) -> Element<Message> {
-        //let font_size = Settings::<()>::default().default_text_size;
-
-        /*let title = text("Y.A.M.A - Your Anime Manager Automata")
-        .size(font_size + 4.0)
-        .vertical_alignment(alignment::Vertical::Center);*/
-
         let pane_view = if let Some(pane) = &self.pane {
             pane.view()
         } else {
@@ -189,12 +183,6 @@ impl Application for Frontend {
                         .on_press(Message::MenuBar(MenuBar::About))
                         .style(theme::Button::Menu),
                 ],
-                /*button(text(" ").size(0))
-                .padding(0)
-                .style(theme::Button::Separator)
-                .width(Length::Fill)
-                .height(Length::Fixed(1.0)),*/
-                //title,
                 pane_view,
             ]
             .spacing(10),
@@ -216,6 +204,7 @@ impl Application for Frontend {
 
                 Modal::new(content, modal).into()
             }
+
             State::Watching => {
                 let modal = container(
                     text("Watching episode...")
@@ -225,53 +214,18 @@ impl Application for Frontend {
                         .width(Length::Fill)
                         .height(Length::Fill),
                 )
-                .width(Length::Fixed(600.0))
-                .height(Length::Fixed(300.0))
+                .width(Length::Fill)
+                .height(Length::Fill)
                 .padding(10);
 
                 Modal::new(content, modal).into()
             }
+
             State::ShowingMenu(menu) => {
                 let modal = match menu {
-                    MenuBar::About => container(
-                        column![
-                            button(text("yama").style(theme::Text::Color(theme::FOCUS)))
-                                .on_press(Message::MenuBar(MenuBar::Yama)),
-                            text(format!(
-                                "\nVersion: {}\n\nBy {}",
-                                env!("CARGO_PKG_VERSION"),
-                                env!("CARGO_PKG_AUTHORS")
-                            ))
-                            .vertical_alignment(alignment::Vertical::Center)
-                            .horizontal_alignment(alignment::Horizontal::Center)
-                            .width(Length::Fill)
-                            .height(Length::Fill)
-                        ]
-                        .height(Length::Fixed(150.0))
-                        .align_items(alignment::Alignment::Center),
-                    )
-                    .center_y()
-                    .width(Length::Fixed(600.0))
-                    .height(Length::Fixed(300.0))
-                    .padding(10)
-                    .style(theme::Container::Box),
-
-                    MenuBar::Config => container(GUIConfig::view(&self.cfg))
-                        .width(Length::Fixed(300.0))
-                        .height(Length::Fixed(300.0))
-                        .padding(25)
-                        .style(theme::Container::Box),
-
-                    MenuBar::Yama => {
-                        let img = image::Handle::from_memory(YAMA_PNG);
-                        container(image::Image::new(img))
-                            .center_x()
-                            .center_y()
-                            .width(Length::Fixed(300.0))
-                            .height(Length::Fixed(300.0))
-                            .padding(25)
-                            .style(theme::Container::Box)
-                    }
+                    MenuBar::About => menus::about(),
+                    MenuBar::Config => menus::config(&self.cfg),
+                    MenuBar::Yama => menus::yama(),
                 };
 
                 Modal::new(content, modal)
@@ -280,50 +234,5 @@ impl Application for Frontend {
             }
             _ => content.into(),
         }
-    }
-}
-
-fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
-    use keyboard::KeyCode;
-
-    match key_code {
-        // Bridge Messages
-        KeyCode::Up | KeyCode::K => {
-            Some(Message::PaneAction(PanelAction::FocusItem(Direction::Up)))
-        }
-        KeyCode::Down | KeyCode::J => {
-            Some(Message::PaneAction(PanelAction::FocusItem(Direction::Down)))
-        }
-        KeyCode::Right | KeyCode::L => Some(Message::PaneAction(PanelAction::Enter)),
-        KeyCode::Enter => Some(Message::PaneAction(PanelAction::Enter)),
-        KeyCode::Left | KeyCode::H => Some(Message::PaneAction(PanelAction::Back)),
-        KeyCode::R => Some(Message::PaneAction(PanelAction::Refresh)),
-        KeyCode::W | KeyCode::Space => Some(Message::PaneAction(PanelAction::MarkEpisode)),
-
-        // Messages
-        KeyCode::Q => Some(Message::Exit),
-        _ => None,
-    }
-}
-
-fn handle_mousewheel(delta: mouse::ScrollDelta) -> Option<Message> {
-    if let mouse::ScrollDelta::Lines { x: _, y } = delta {
-        if y > 0.0 {
-            Some(Message::PaneAction(PanelAction::FocusItem(Direction::Up)))
-        } else {
-            Some(Message::PaneAction(PanelAction::FocusItem(Direction::Down)))
-        }
-    } else {
-        None
-    }
-}
-
-fn handle_mousebutton(button: mouse::Button) -> Option<Message> {
-    match button {
-        mouse::Button::Right | mouse::Button::Other(8) => {
-            Some(Message::PaneAction(PanelAction::Back))
-        }
-        mouse::Button::Other(9) => Some(Message::PaneAction(PanelAction::Enter)),
-        _ => None,
     }
 }

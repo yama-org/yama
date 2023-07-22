@@ -1,4 +1,4 @@
-use backend::{Backend, Episode, Meta, Title};
+use backend::{Backend, Episode, Meta, MetaType, Title};
 use std::{path::Path, sync::Arc};
 
 /// A cached copy of backend data to be shared with the frontend thread without the need of lockers.
@@ -147,6 +147,8 @@ impl EpisodeCache {
 pub struct MetaCache {
     pub thumbnail: Option<Arc<Path>>,
     pub description: Arc<str>,
+    pub title: Arc<str>,
+    pub mtype: MetaType,
 }
 
 impl MetaCache {
@@ -154,7 +156,9 @@ impl MetaCache {
     pub fn empty() -> Self {
         Self {
             thumbnail: None,
+            title: Arc::from("Unknown"),
             description: Arc::from("No description found..."),
+            mtype: MetaType::Title,
         }
     }
 }
@@ -168,6 +172,8 @@ impl Default for MetaCache {
 impl From<&dyn Meta> for MetaCache {
     fn from(title: &dyn Meta) -> Self {
         Self {
+            mtype: title.mtype(),
+            title: title.title(),
             thumbnail: title.thumbnail(),
             description: title.description(),
         }

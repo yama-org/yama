@@ -1,12 +1,12 @@
 use crate::backend::title::Title as BTitle;
 use crate::Result;
+use aho_corasick::AhoCorasick;
 use anyhow::bail;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
     ffi::OsString,
-    io::Write,
     path::{Path, PathBuf},
 };
 use tracing::info;
@@ -187,13 +187,16 @@ impl Data {
 
         info!("Image downloaded for: {}", self.media.title.english);
 
-        let name_file = path.join(".metadata").join("thumbnail.jpg");
+        let image = image::load_from_memory_with_format(&bytes, image::ImageFormat::Jpeg)?;
+        /*if image.width() > 1900 || image.height() > 400 {
+            image = image.resize_to_fill(1900, 400, image::imageops::FilterType::Nearest);
+        }*/
 
+        let name_file = path.join(".metadata").join("thumbnail.jpg");
         let mut file = std::fs::File::create(&name_file)?;
-        file.write_all(&bytes)?;
+        image.write_to(&mut file, image::ImageFormat::Jpeg)?;
 
         self.set_thumbnail_path(name_file);
-
         Ok(self)
     }
 
@@ -208,7 +211,11 @@ impl Data {
     }
 
     fn clean_description(&mut self) -> &mut Self {
-        self.media.description = self.media.description.replace("<br>", "");
+        let ac =
+            AhoCorasick::new(["<b>", "</b>", "<i>", "</i>", "<br>\n<br>", "<br><br>"]).unwrap();
+        self.media.description =
+            ac.replace_all(&self.media.description, &["", "", "", "", "\n", "\n"]);
+
         self
     }
 
@@ -221,5 +228,16 @@ impl Data {
         }
 
         self
+    }
+}
+
+impl Media {
+    pub fn to_str(&self) -> Box<str> {
+        format!(
+            "Description: {}\n\nGenres: {}",
+            self.description.trim(),
+            self.genres.join(", ")
+        )
+        .into_boxed_str()
     }
 }

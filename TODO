@@ -12,18 +12,18 @@
 - For 0.7.0:
 [] Refactoring:
     [X] Better Error Handling (use anyhow insted of tracing-unwrap)
-    [] Improve HTTP Client (hyper insted of reqwest)
-    [] Use tokio::watch for reading changes in the config file
     [X] Reduce memory usage and binary size
+    [X] Gracefully crash
     [X] Documentation
+    [] Improve HTTP Client (hyper insted of reqwest)
 [] Enhance UI:
-    [] Set thumbnail to a fixed height
-    [] Rich text for descriptions
-    [] Better distinction between "Titles"/"Episodes" and the titles/episodes names
-    [?] Custom themes
-[] Fix mousewheel not moving when the cursor is on top of the list
-[] Adding [page-up/down, home/end] keybindings
-[X] Gracefully crash
+    [X] Set thumbnail to a fixed height
+    [X] Better distinction between "Titles"/"Episodes" and the titles/episodes names
+    [X] Add mouse pointer
+    [X] Adding [page-up/down, home/end] keybindings
+    [] Custom themes
+    [] Error message
+    [] Extra config options
 
 - For 0.8.0:
 [?] More title information (voice actors, etc)

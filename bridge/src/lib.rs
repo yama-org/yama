@@ -49,8 +49,12 @@ pub enum PanelAction {
     MarkPreviousEpisodes,
     MarkEpisode,
     FocusItem(Direction),
+    JumpTo(usize),
+    Plus(isize),
     Refresh,
     Enter,
+    Start,
+    End,
     Back,
     Resized(ResizeEvent),
 }

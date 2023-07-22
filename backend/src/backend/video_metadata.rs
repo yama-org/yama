@@ -58,7 +58,7 @@ impl VideoMetadata {
             ..Default::default()
         };
 
-        let parsed = serde_json::to_string(&vm)?;
+        let parsed = serde_json::to_string_pretty(&vm)?;
         Ok(file.write_all(parsed.as_bytes())?)
     }
 
@@ -66,7 +66,7 @@ impl VideoMetadata {
     /// passed to the referenced _path_.
     pub fn create_file(metadata: &VideoMetadata, path: &PathBuf) -> Result<()> {
         let mut file = fs::File::create(path)?;
-        let parsed = serde_json::to_string(metadata)?;
+        let parsed = serde_json::to_string_pretty(metadata)?;
         Ok(file.write_all(parsed.as_bytes())?)
     }
 

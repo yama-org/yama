@@ -1,24 +1,18 @@
-use std::format;
-
 use crate::widgets::theme::{self, widget::Element};
 
 use backend::Config;
 use bridge::FrontendMessage;
 
-use iced::widget::svg;
-use iced::widget::{button, column, row, text};
+use iced::widget::{button, column, row, svg, text};
 use iced::{alignment, Length};
-//use iced_native::widget::svg;
 use tracing::{info, warn};
-
-static FOLDER_SVG: &[u8] = include_bytes!("../../res/svgs/folder.svg");
 
 pub struct GUIConfig;
 
 impl GUIConfig {
     pub fn view<'a>(cfg: &Config) -> Element<'a, FrontendMessage> {
         let folder_path = format!("{}", cfg.series_path.display());
-        let folder_svg = svg(svg::Handle::from_memory(FOLDER_SVG))
+        let folder_svg = svg(svg::Handle::from_memory(crate::embedded::FOLDER_SVG))
             .width(Length::Fixed(25.0))
             .height(Length::Fixed(25.0));
 

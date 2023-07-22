@@ -53,6 +53,22 @@ impl InnerData {
         self.pointers[self.focused].0.update(direction)
     }
 
+    pub fn jump_to(&mut self, to: usize) -> f32 {
+        self.pointers[self.focused].0.jump_to(to)
+    }
+
+    pub fn plus(&mut self, to_add: isize) -> f32 {
+        self.pointers[self.focused].0.plus(to_add)
+    }
+
+    pub fn start(&mut self) -> f32 {
+        self.pointers[self.focused].0.start()
+    }
+
+    pub fn end(&mut self) -> f32 {
+        self.pointers[self.focused].0.end()
+    }
+
     /// Sets the [`TitleCache`][TitleCache] of the indexed [`TitleCache`][TitleCache].
     /// ## Panics
     /// May panic if `number` is out of bounds.

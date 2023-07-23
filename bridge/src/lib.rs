@@ -32,9 +32,9 @@ pub enum FrontendMessage {
     Ready(mpsc::Sender<BackendMessage>, Cache),
     PaneAction(PanelAction),
     Loading(Instant),
-    MenuBar(MenuBar),
+    MenuBar(Modals),
     HideMenubar,
-    FileDialog,
+    UpdateConfig(ConfigChange),
     Exit,
     Error(Arc<str>),
 }
@@ -59,10 +59,19 @@ pub enum PanelAction {
     Resized(ResizeEvent),
 }
 
-/// [yama] menus
+/// [yama] floating windows
 #[derive(Debug, Clone)]
-pub enum MenuBar {
+pub enum Modals {
+    Help,
     About,
     Config,
     Yama,
+    Error(Arc<str>),
+}
+
+#[derive(Debug, Clone)]
+pub enum ConfigChange {
+    SeriesPath,
+    THemePath,
+    MinTime(f32),
 }

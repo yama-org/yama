@@ -11,7 +11,10 @@ backend = { path = "../backend" }
 bridge = { path = "../bridge" }
 confy = { workspace = true }
 iced = { workspace = true}
+iced_aw = { version = "0.5", default-features = false, features = ["number_input"]}
 iced_native = "0.10"
 once_cell = { workspace = true }
 rfd = "0.11"
+serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }

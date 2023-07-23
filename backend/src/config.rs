@@ -1,10 +1,20 @@
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+static CFG_PATH: Lazy<PathBuf> = Lazy::new(|| {
+    confy::get_configuration_file_path("yama", "config")
+        .expect("[ERROR] - No configuration path found.")
+        .parent()
+        .expect("[ERROR] - No valid configuration path found.")
+        .to_path_buf()
+});
 
 /// [yama's] Config
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub series_path: PathBuf,
+    pub theme_path: PathBuf,
     pub min_time: f32,
 }
 
@@ -15,6 +25,7 @@ impl Default for Config {
 
         Self {
             series_path: PathBuf::from("./series"),
+            theme_path: CFG_PATH.join("themes/iced.json"),
             min_time: 10.0,
         }
     }

@@ -1,6 +1,8 @@
 #![windows_subsystem = "windows"]
 
 use frontend::{Frontend, Result};
+use once_cell::sync::Lazy;
+use std::path::PathBuf;
 use tracing::info;
 
 #[cfg(target_os = "windows")]
@@ -13,6 +15,15 @@ use windows::{
 };
 
 static SAVEINFO_LUA: &[u8] = include_bytes!("../scripts/save_info.lua");
+static DEFAULT_THEME: &[u8] = include_bytes!("../res/iced.json");
+
+static CFG_PATH: Lazy<PathBuf> = Lazy::new(|| {
+    confy::get_configuration_file_path("yama", "config")
+        .expect("[ERROR] - No configuration path found.")
+        .parent()
+        .expect("[ERROR] - No valid configuration path found.")
+        .to_path_buf()
+});
 
 pub fn main() -> Result<()> {
     #[cfg(target_os = "windows")]
@@ -34,15 +45,15 @@ pub fn main() -> Result<()> {
     info!("Starting up yama...");
 
     let config = confy::load("yama", "config")?;
-    let config_path = confy::get_configuration_file_path("yama", "config")
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("scripts");
 
-    if config_path.join("save_info.lua").metadata().is_err() {
-        std::fs::create_dir_all(&config_path)?;
-        std::fs::write(config_path.join("save_info.lua"), SAVEINFO_LUA)?;
+    if !CFG_PATH.join("scripts/save_info.lua").is_dir() {
+        std::fs::create_dir_all(CFG_PATH.join("scripts"))?;
+        std::fs::write(CFG_PATH.join("scripts/save_info.lua"), SAVEINFO_LUA)?;
+    }
+
+    if !CFG_PATH.join("themes").is_dir() {
+        std::fs::create_dir_all(CFG_PATH.join("themes"))?;
+        std::fs::write(CFG_PATH.join("themes/iced.json"), DEFAULT_THEME)?;
     }
 
     Frontend::execute(config)
@@ -56,15 +67,11 @@ fn setup_logger() {
         )
     }
 
-    let config_path = confy::get_configuration_file_path("yama", "config")
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("logs");
+    let logs_path = CFG_PATH.join("logs");
 
-    std::fs::create_dir_all(&config_path).unwrap();
+    std::fs::create_dir_all(&logs_path).unwrap();
 
-    let file_appender = tracing_appender::rolling::daily(&config_path, "yama.log");
+    let file_appender = tracing_appender::rolling::daily(&logs_path, "yama.log");
     let timer = tracing_subscriber::fmt::time::UtcTime::new(time::macros::format_description!(
         "[day]/[month]/[year] - [hour]:[minute]:[second] UTC"
     ));

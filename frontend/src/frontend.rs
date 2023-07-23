@@ -3,9 +3,11 @@ use crate::widgets::*;
 use crate::{keybindings, Result};
 
 use backend::Config;
-use bridge::{FrontendMessage as Message, MenuBar, PanelAction};
+use bridge::{ConfigChange, FrontendMessage as Message, Modals, PanelAction};
 
-use iced::widget::{button, canvas, column, container, pane_grid::Direction, row, text};
+use iced::widget::{
+    button, canvas, column, container, horizontal_space, pane_grid::Direction, row, text,
+};
 use iced::{alignment, executor, keyboard, mouse, window};
 use iced::{event, subscription, Event};
 use iced::{Application, Command, Length, Settings, Subscription};
@@ -16,7 +18,7 @@ pub enum State {
     Normal,
     Loading,
     Watching,
-    ShowingMenu(MenuBar),
+    ShowingMenu(Modals),
 }
 
 #[derive(Debug)]
@@ -89,7 +91,8 @@ impl Application for Frontend {
                 }
                 Message::Error(err) => {
                     error!("yama has encounter an error: {err}");
-                    return window::close::<Message>();
+                    self.state = State::Normal;
+                    return Command::perform(async { Modals::Error(err) }, Message::MenuBar);
                 }
                 _ => (),
             },
@@ -104,13 +107,19 @@ impl Application for Frontend {
                 match message {
                     Message::MenuBar(menu) => self.state = State::ShowingMenu(menu),
                     Message::HideMenubar => self.state = State::Normal,
-                    Message::FileDialog => GUIConfig::file_dialog(&mut self.cfg),
+                    Message::UpdateConfig(change) => match change {
+                        ConfigChange::SeriesPath => GUIConfig::change_series_path(&mut self.cfg),
+                        ConfigChange::THemePath => GUIConfig::change_theme_path(&mut self.cfg),
+                        ConfigChange::MinTime(new_time) => {
+                            GUIConfig::change_min_time(&mut self.cfg, new_time)
+                        }
+                    },
                     Message::Exit => {
                         return window::close::<Message>();
                     }
                     Message::Error(err) => {
                         error!("yama has encounter an error: {err}");
-                        return window::close::<Message>();
+                        return Command::perform(async { Modals::Error(err) }, Message::MenuBar);
                     }
                     _ => (),
                 }
@@ -170,19 +179,25 @@ impl Application for Frontend {
         let pane_view = if let Some(pane) = &self.pane {
             pane.view()
         } else {
-            text("").into()
+            horizontal_space(Length::Shrink).into()
         };
 
         let content = container(
             column![
                 row![
                     button("Config")
-                        .on_press(Message::MenuBar(MenuBar::Config))
+                        .on_press(Message::MenuBar(Modals::Config))
                         .style(theme::Button::Menu),
                     button("About")
-                        .on_press(Message::MenuBar(MenuBar::About))
+                        .on_press(Message::MenuBar(Modals::About))
                         .style(theme::Button::Menu),
-                ],
+                    horizontal_space(Length::Fill),
+                    button("  ?  ")
+                        .on_press(Message::MenuBar(Modals::Help))
+                        .style(theme::Button::Menu)
+                ]
+                .align_items(iced::Alignment::Center)
+                .width(Length::Fill),
                 pane_view,
             ]
             .spacing(10),
@@ -200,7 +215,7 @@ impl Application for Frontend {
                 )
                 .width(Length::Fixed(300.0))
                 .height(Length::Fixed(300.0))
-                .padding(10);
+                .padding(15);
 
                 Modal::new(content, modal).into()
             }
@@ -216,16 +231,18 @@ impl Application for Frontend {
                 )
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .padding(10);
+                .padding(15);
 
                 Modal::new(content, modal).into()
             }
 
             State::ShowingMenu(menu) => {
                 let modal = match menu {
-                    MenuBar::About => menus::about(),
-                    MenuBar::Config => menus::config(&self.cfg),
-                    MenuBar::Yama => menus::yama(),
+                    Modals::Help => menus::help(),
+                    Modals::About => menus::about(),
+                    Modals::Config => menus::config(&self.cfg),
+                    Modals::Yama => menus::yama(),
+                    Modals::Error(err) => menus::error(err.clone()),
                 };
 
                 Modal::new(content, modal)

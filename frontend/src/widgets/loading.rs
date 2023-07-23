@@ -1,4 +1,4 @@
-use crate::widgets::theme::{self, Theme};
+use crate::widgets::theme::Theme;
 
 use iced::widget::canvas::stroke::{self, Stroke};
 use iced::widget::canvas::{self, Cursor, Path};
@@ -34,7 +34,7 @@ impl<Message> canvas::Program<Message, Theme> for LoadingCircle {
     fn draw(
         &self,
         _state: &Self::State,
-        _theme: &Theme,
+        theme: &Theme,
         bounds: Rectangle,
         _cursor: Cursor,
     ) -> Vec<canvas::Geometry> {
@@ -48,7 +48,7 @@ impl<Message> canvas::Program<Message, Theme> for LoadingCircle {
             frame.stroke(
                 &orbit,
                 Stroke {
-                    style: stroke::Style::Solid(theme::TEXT),
+                    style: stroke::Style::Solid(theme.text),
                     width: 2.0,
                     line_dash: canvas::LineDash {
                         offset: 0,
@@ -68,7 +68,7 @@ impl<Message> canvas::Program<Message, Theme> for LoadingCircle {
                 frame.translate(Vector::new(radius, 0.0));
 
                 let circle = Path::circle(Point::ORIGIN, radius / 6.0);
-                frame.fill(&circle, theme::FOCUS);
+                frame.fill(&circle, theme.focus);
             });
         });
 

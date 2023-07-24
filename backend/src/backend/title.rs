@@ -1,10 +1,10 @@
-use crate::Result;
 use crate::networking::anilist::Data;
+use crate::Result;
 use crate::{Backend, Episode};
 
+use anyhow::bail;
 use core::fmt::Debug;
 use std::{fs, path::PathBuf, sync::Arc};
-use anyhow::bail;
 use tracing::error;
 
 /// Contains all the information necessary to display a title in [yama].
@@ -96,8 +96,6 @@ impl Title {
                     })
                     .collect();
 
-                //let files = self.path.join(".metadata/files.md");
-                //let mut file = fs::File::create(files)?;
                 paths.sort_by(|a, b| alphanumeric_sort::compare_path(a, b));
 
                 let mut episodes = Vec::with_capacity(paths.len());
@@ -111,7 +109,6 @@ impl Title {
                 while !futs.is_empty() {
                     match future::select_all(futs).await {
                         (Ok(ep), _, remaining) => {
-                            //writeln!(file, "{}", ep.path.display())?;
                             episodes.push(ep);
                             futs = remaining;
                         }
@@ -129,36 +126,7 @@ impl Title {
                     .map(|(idx, ep)| ep.change_number(idx))
                     .collect();
                 episodes
-            }; /*else {
-                   let paths: Vec<PathBuf> = fs::read_to_string(self.path.join(".metadata/files.md"))?
-                       .lines()
-                       .map(PathBuf::from)
-                       .collect();
-
-                   let mut episodes = Vec::with_capacity(paths.len());
-                   let mut futs: Vec<_> = paths
-                       .iter()
-                       .enumerate()
-                       .map(|(i, path)| Episode::new(path, i as u16))
-                       .map(Box::pin)
-                       .collect();
-
-                   while !futs.is_empty() {
-                       match future::select_all(futs).await {
-                           (Ok(ep), _, remaining) => {
-                               episodes.push(ep);
-                               futs = remaining;
-                           }
-                           (Err(e), _, remaining) => {
-                               error!("{e}");
-                               futs = remaining;
-                           }
-                       }
-                   }
-
-                   episodes.sort_by(|a, b| alphanumeric_sort::compare_str(&a.name, &b.name));
-                   episodes
-               };*/
+            };
 
             self.count = episodes.len() as u16;
             self.episodes_cache = Some(episodes.iter().map(|e| e.name.clone()).collect());

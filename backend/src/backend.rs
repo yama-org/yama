@@ -105,16 +105,15 @@ impl Backend {
         {
             use std::os::windows::process::CommandExt;
 
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            //const DETACHED_PROCESS: u32 = 0x00000008;
+            //const CREATE_NO_WINDOW: u32 = 0x08000000;
+            const DETACHED_PROCESS: u32 = 0x00000008;
 
             let mut cmd = cmd.split(',');
             let output = Command::new(cmd.next().unwrap())
                 .current_dir(env::current_dir()?)
                 .args(cmd)
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()
-                .map_err(|e| Error::new(e.into(), cmd))?;
+                .creation_flags(DETACHED_PROCESS)
+                .output()?;
 
             if !output.status.success() {
                 bail!("Command failed: {}", String::from_utf8(output.stdout)?);
@@ -160,7 +159,7 @@ impl Backend {
         Backend::run_process(&cmd)
     }
 
-    #[cfg(not(target_os = "windows"))]
+    // #[cfg(not(target_os = "windows"))]
     /// **(Linux Version) [`Backend`][Backend] util:** Returns an [`Iterator`][Iterator] with all the _(non-hidden)_ paths inside a given directory.
     fn get_files(path: &PathBuf) -> Result<impl Iterator<Item = PathBuf>> {
         Ok(fs::read_dir(path)?
@@ -177,7 +176,7 @@ impl Backend {
             }))
     }
 
-    #[cfg(target_os = "windows")]
+    /*#[cfg(target_os = "windows")]
     /// **(Windows Version) [`Backend`][Backend] util:** Returns an [`Iterator`][Iterator] with all the _(non-hidden)_ paths inside a given directory.
     fn get_files(path: &PathBuf) -> Result<impl Iterator<Item = PathBuf>> {
         use std::os::windows::fs::MetadataExt;
@@ -194,7 +193,7 @@ impl Backend {
                 }
                 Err(_) => None,
             }))
-    }
+    }*/
 
     /// Returns the specified [`Episode`][crate::Episode] or [`None`][None] if it doesn't exist.
     pub fn get_episode(

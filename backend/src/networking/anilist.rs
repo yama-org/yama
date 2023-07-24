@@ -1,96 +1,20 @@
-use crate::backend::title::Title as BTitle;
+pub mod query;
+
+pub use query::*;
+
+use crate::backend::title::Title;
 use crate::Result;
 
-use aho_corasick::AhoCorasick;
 use anyhow::bail;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use hyper::{body::Buf, client::HttpConnector, Body, Client, Method, Request, Response};
+use hyper_tls::HttpsConnector;
 use serde_json::json;
-use std::{
-    ffi::OsString,
-    io::Write,
-    path::{Path, PathBuf},
-};
-use tracing::info;
+use std::{ffi::OsString, path::Path};
 
-const QUERY: &str = r#"
-query ($search: String) {
-  Media (search: $search, type: ANIME) {
-    id,
-    title {
-      romaji,
-      english,
-      native,
-    },
-    description,
-    genres,
-    bannerImage,
-    studios {
-        edges {
-          isMain,
-          node {
-            name
-          }
-        }
-      }
-  }
-}
-"#;
-
+/// [`Client`] connected to the Anilist API.
+#[derive(Debug)]
 pub struct Anilist {
-    client: Client,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Query {
-    data: Data,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct Data {
-    pub media: Media,
-    #[serde(skip)]
-    pub thumbnail_path: PathBuf,
-    #[serde(skip)]
-    pub id: usize,
-    #[serde(skip)]
-    pub studio: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Media {
-    id: usize,
-    pub title: Title,
-    pub description: String,
-    pub genres: Vec<String>,
-    banner_image: String,
-    pub studios: Studio,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Title {
-    pub romaji: String,
-    pub english: String,
-    pub native: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Studio {
-    pub edges: Vec<Edges>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Edges {
-    pub is_main: bool,
-    pub node: Node,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Node {
-    pub name: String,
+    client: Client<HttpsConnector<HttpConnector>>,
 }
 
 impl Default for Anilist {
@@ -100,37 +24,43 @@ impl Default for Anilist {
 }
 
 impl Anilist {
+    /// New [`Client`] connected with a [`HttpsConnector`].
     pub fn new() -> Anilist {
-        Anilist {
-            client: Client::new(),
-        }
+        let https = HttpsConnector::new();
+        let client = Client::builder().build::<_, hyper::Body>(https);
+
+        Anilist { client }
     }
 
-    async fn query(&self, path: &Path, search: &str, id: usize) -> Result<Data> {
-        let json = json!({"query": QUERY, "variables": {"search": search}});
-        let resp = self
-            .client
-            .post("https://graphql.anilist.co/") //BUT WHY IS IT POST???, I must move to hyper as soon as i can!
+    /// POST the [`QUERY`] to the Anilist API with the title name as it's variable.
+    ///
+    /// Downloads a json-file and a jpg-file.
+    async fn query(&self, path: &Path, title_search: &str, id: usize) -> Result<Data> {
+        let json = json!({"query": QUERY, "variables": {"search": title_search}});
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri("https://graphql.anilist.co/")
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .body(json.to_string())
-            .send()
-            .await?
-            .text()
-            .await?;
+            .body(Body::from(json.to_string()))?;
 
-        let result: Query = serde_json::from_str(&resp)?;
-        std::fs::write(path.join(".metadata").join("data.json"), resp)?;
+        let resp = self.client.request(req).await?;
+        let body = hyper::body::aggregate(resp).await?;
+        let result: Query = serde_json::from_reader(body.reader())?;
 
-        let data = result.data.download_image(self, path);
-        let mut data = data.await?;
+        let content = serde_json::to_string_pretty(&result)?;
+        std::fs::write(path.join(".metadata").join("data.json"), content)?;
+
+        let mut data = result.data.download_image(self, path).await?;
         data.set_id(id);
-        data.clean_description();
         data.find_studio();
+        data.clean_description();
 
         Ok(data)
     }
 
+    /// Grabs the json-file and a jpg-file from a previously made [`Query`].
     fn cached_query(&self, path: &Path, id: usize) -> Result<Data> {
         let content = std::fs::read_to_string(path.join(".metadata").join("data.json"))?;
 
@@ -138,19 +68,27 @@ impl Anilist {
 
         let mut data = result.data;
         data.set_id(id);
-        data.set_thumbnail_path(path.join(".metadata").join("thumbnail.jpg"));
-        data.clean_description();
         data.find_studio();
+        data.clean_description();
+        data.set_thumbnail_path(path.join(".metadata").join("thumbnail.jpg"));
 
         Ok(data)
     }
 
-    pub async fn try_query(&self, title: &mut BTitle, id: usize) -> Result<()> {
+    /// GET Request of the indicated url.
+    pub async fn get_body(&self, url: &str) -> Result<Response<Body>> {
+        let uri: hyper::Uri = url.parse()?;
+        let res = self.client.get(uri).await?;
+        Ok(res)
+    }
+
+    /// Checks if a [`Query`] was previously made for this [`Title`] or makes a new one.
+    pub async fn try_query(&self, title: &mut Title, id: usize) -> Result<()> {
         let path = title.path.as_path();
         let search = &title.name;
 
         if let Ok(files) = std::fs::read_dir(path.join(".metadata")) {
-            let files: Vec<OsString> = files
+            let files: Vec<_> = files
                 .into_iter()
                 .flatten()
                 .map(|file| file.file_name())
@@ -171,70 +109,5 @@ impl Anilist {
             Some(_) => Ok(()),
             None => bail!("Failed query of: {}", search),
         }
-    }
-
-    async fn download_image(&self, url: &str) -> Result<reqwest::Response> {
-        let res = self.client.get(url).send().await?;
-        Ok(res)
-    }
-}
-
-impl Data {
-    async fn download_image(mut self, api: &Anilist, path: &Path) -> Result<Data> {
-        let bytes = api
-            .download_image(&self.media.banner_image)
-            .await?
-            .bytes()
-            .await?;
-
-        info!("Image downloaded for: {}", self.media.title.english);
-
-        let name_file = path.join(".metadata").join("thumbnail.jpg");
-        let mut file = std::fs::File::create(&name_file)?;
-        file.write_all(&bytes)?;
-
-        self.set_thumbnail_path(name_file);
-        Ok(self)
-    }
-
-    fn set_thumbnail_path(&mut self, path: PathBuf) -> &mut Self {
-        self.thumbnail_path = path;
-        self
-    }
-
-    fn set_id(&mut self, id: usize) -> &mut Self {
-        self.id = id;
-        self
-    }
-
-    fn clean_description(&mut self) -> &mut Self {
-        let ac =
-            AhoCorasick::new(["<b>", "</b>", "<i>", "</i>", "<br>\n<br>", "<br><br>"]).unwrap();
-        self.media.description =
-            ac.replace_all(&self.media.description, &["", "", "", "", "\n", "\n"]);
-
-        self
-    }
-
-    fn find_studio(&mut self) -> &mut Self {
-        for studio in &self.media.studios.edges {
-            if studio.is_main {
-                self.studio = studio.node.name.clone();
-                break;
-            }
-        }
-
-        self
-    }
-}
-
-impl Media {
-    pub fn to_str(&self) -> Box<str> {
-        format!(
-            "Description: {}\n\nGenres: {}",
-            self.description.trim(),
-            self.genres.join(", ")
-        )
-        .into_boxed_str()
     }
 }

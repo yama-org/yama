@@ -10,12 +10,12 @@
 [X] Add icon for windows
 
 - For 0.7.0:
-[] Refactoring:
+[X] Refactoring:
     [X] Better Error Handling (use anyhow insted of tracing-unwrap)
     [X] Reduce memory usage and binary size
     [X] Gracefully crash
     [X] Documentation
-    [] Improve HTTP Client (hyper insted of reqwest)
+    [X] Improve HTTP Client (hyper insted of reqwest)
 [X] Enhance UI:
     [X] Set thumbnail to a fixed height
     [X] Better distinction between "Titles"/"Episodes" and the titles/episodes names

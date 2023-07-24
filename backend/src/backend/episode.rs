@@ -36,7 +36,7 @@ impl Episode {
         });
 
         // We know it has a parent folder, its the title folder.
-        let dir = unsafe { path.parent().unwrap_unchecked() };
+        let dir = path.parent().unwrap();
 
         let md_folder = format!(".metadata/episode_{number}");
         fs::create_dir_all(format!("{}/{}", dir.display(), &md_folder))?;

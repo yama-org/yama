@@ -1,9 +1,11 @@
+use std::sync::Arc;
+
 use crate::config::GUIConfig;
 use crate::widgets::*;
 use crate::{keybindings, Result};
 
 use backend::Config;
-use bridge::{ConfigChange, FrontendMessage as Message, Modals, PanelAction};
+use bridge::{BackendMessage, ConfigChange, FrontendMessage as Message, Modals, PanelAction};
 
 use iced::widget::{
     button, canvas, column, container, horizontal_space, pane_grid::Direction, row, text,
@@ -11,7 +13,8 @@ use iced::widget::{
 use iced::{alignment, executor, keyboard, mouse, window};
 use iced::{event, subscription, Event};
 use iced::{Application, Command, Length, Settings, Subscription};
-use tracing::error;
+use iced_native::futures::channel::mpsc::Sender;
+use tracing::{error, info};
 
 #[derive(Debug)]
 pub enum State {
@@ -27,6 +30,7 @@ pub struct Frontend {
     state: State,
     pane: Option<Panels>,
     loading: LoadingCircle,
+    sender: Option<Sender<BackendMessage>>,
 }
 
 impl Frontend {
@@ -62,6 +66,7 @@ impl Application for Frontend {
                 pane: None,
                 state: State::Loading,
                 loading: LoadingCircle::new(),
+                sender: None,
             },
             Command::none(),
         )
@@ -76,6 +81,7 @@ impl Application for Frontend {
             State::Loading => match message {
                 Message::Loading(instant) => self.loading.update(instant),
                 Message::Ready(sender, cache) => {
+                    self.sender = Some(sender.clone());
                     self.pane = Some(Panels::new(cache, sender));
                     self.state = State::Normal;
 
@@ -94,6 +100,10 @@ impl Application for Frontend {
                     self.state = State::Normal;
                     return Command::perform(async { Modals::Error(err) }, Message::MenuBar);
                 }
+                Message::Recovery(sender, err) => {
+                    self.sender = Some(sender);
+                    return Command::perform(async { err }, Message::Error);
+                }
                 _ => (),
             },
 
@@ -105,21 +115,43 @@ impl Application for Frontend {
                 }
 
                 match message {
+                    Message::ToLoad => self.state = State::Loading,
                     Message::MenuBar(menu) => self.state = State::ShowingMenu(menu),
                     Message::HideMenubar => self.state = State::Normal,
                     Message::UpdateConfig(change) => match change {
-                        ConfigChange::SeriesPath => GUIConfig::change_series_path(&mut self.cfg),
-                        ConfigChange::THemePath => GUIConfig::change_theme_path(&mut self.cfg),
+                        ConfigChange::SeriesPath => {
+                            let res = GUIConfig::change_series_path(&mut self.cfg);
+
+                            match res {
+                                Ok(()) => {
+                                    if let Some(sender) = &mut self.sender {
+                                        let _ = sender.try_send(BackendMessage::Restart);
+                                    }
+                                }
+                                Err(err) => {
+                                    return Command::perform(
+                                        async move { Arc::from(err.to_string()) },
+                                        Message::Error,
+                                    );
+                                }
+                            }
+                        }
+                        ConfigChange::ThemePath => GUIConfig::change_theme_path(&mut self.cfg),
                         ConfigChange::MinTime(new_time) => {
                             GUIConfig::change_min_time(&mut self.cfg, new_time)
                         }
                     },
                     Message::Exit => {
+                        info!("Bye-bye~");
                         return window::close::<Message>();
                     }
                     Message::Error(err) => {
                         error!("yama has encounter an error: {err}");
                         return Command::perform(async { Modals::Error(err) }, Message::MenuBar);
+                    }
+                    Message::Recovery(sender, err) => {
+                        self.sender = Some(sender);
+                        return Command::perform(async { err }, Message::Error);
                     }
                     _ => (),
                 }

@@ -45,8 +45,7 @@ struct ThemeParser {
 
 impl Default for Theme {
     fn default() -> Self {
-        let cfg: Config =
-            confy::load("yama", "config").expect("[ERROR] - Could not load config file.");
+        let cfg: Config = confy::load("yama", "config").expect("Could not load config file.");
         let content = std::fs::read_to_string(cfg.theme_path).unwrap();
         let tp: ThemeParser = serde_json::from_str(&content).unwrap();
 

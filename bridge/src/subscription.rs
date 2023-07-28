@@ -6,6 +6,7 @@ use tracing::{error, info};
 /// States of the [`Backend`][Backend] [`Subscription`][Subscription].
 #[derive(Debug)]
 enum State {
+    Idle(mpsc::Receiver<BackendMessage>),
     Starting,
     Ready(mpsc::Receiver<BackendMessage>, Backend),
 }
@@ -21,6 +22,16 @@ pub fn start() -> Subscription<FrontendMessage> {
         State::Starting,
         |state| async move {
             match state {
+                State::Idle(mut receiver) => {
+                    use iced::futures::StreamExt;
+                    let msg = receiver.select_next_some().await;
+
+                    if let BackendMessage::Restart = msg {
+                        (FrontendMessage::ToLoad, State::Starting)
+                    } else {
+                        panic!("");
+                    }
+                }
                 State::Starting => {
                     info!("Starting up the backend thread...");
 
@@ -29,7 +40,10 @@ pub fn start() -> Subscription<FrontendMessage> {
                         Ok(b) => b,
                         Err(e) => {
                             error!("Failed to create backend: {e}");
-                            std::process::exit(1)
+                            return (
+                                FrontendMessage::Recovery(sender, Arc::from(e.to_string())),
+                                State::Idle(receiver),
+                            );
                         }
                     };
 
@@ -63,7 +77,7 @@ pub fn start() -> Subscription<FrontendMessage> {
                                         ))
                                     }
                                     Err(e) => {
-                                        error!("{}", e);
+                                        error!("{e}");
                                         FrontendMessage::Error(Arc::from("Could not load title!"))
                                     }
                                 }
@@ -172,6 +186,10 @@ pub fn start() -> Subscription<FrontendMessage> {
                                     FrontendMessage::Error(Arc::from("No title found!"))
                                 }
                             }
+                        }
+
+                        BackendMessage::Restart => {
+                            return (FrontendMessage::ToLoad, State::Starting);
                         }
                     };
 

@@ -1,6 +1,6 @@
 [package]
 name = "bridge"
-version = "0.7.0"
+version = "0.7.1"
 edition = "2021"
 authors = ["Agustin Marcelo Marco Bacigalupo <01marcoagustin@gmail.com>"]
 license = "MIT"

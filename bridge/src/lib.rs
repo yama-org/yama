@@ -24,19 +24,22 @@ pub enum BackendMessage {
     MarkEpisode(TitleIndex, EpisodeNumber),
     /// Args: (Title index, Episode number)
     MarkPreviousEpisodes(TitleIndex, EpisodeNumber),
+    Restart,
 }
 
 /// Messages to be sended to the [Frontend] thread.
 #[derive(Debug, Clone)]
 pub enum FrontendMessage {
+    Recovery(mpsc::Sender<BackendMessage>, Arc<str>),
     Ready(mpsc::Sender<BackendMessage>, Cache),
+    UpdateConfig(ConfigChange),
     PaneAction(PanelAction),
     Loading(Instant),
     MenuBar(Modals),
-    HideMenubar,
-    UpdateConfig(ConfigChange),
-    Exit,
     Error(Arc<str>),
+    HideMenubar,
+    ToLoad,
+    Exit,
 }
 
 /// Action to be sended to the Panels frontend thread.
@@ -72,6 +75,6 @@ pub enum Modals {
 #[derive(Debug, Clone)]
 pub enum ConfigChange {
     SeriesPath,
-    THemePath,
+    ThemePath,
     MinTime(f32),
 }

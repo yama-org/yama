@@ -11,18 +11,14 @@ use anyhow::bail;
 use core::fmt::Debug;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
-use std::{
-    env, fs,
-    path::PathBuf,
-    process::{Command, Output},
-};
+use std::{env, fs, path::PathBuf, process::Command};
 use tracing::warn;
 
 static SCRIPT_PATH: Lazy<PathBuf> = Lazy::new(|| {
     confy::get_configuration_file_path("yama", "config")
-        .expect("[ERROR] - No configuration path found.")
+        .expect("No configuration path found.")
         .parent()
-        .expect("[ERROR] - No valid configuration path found.")
+        .expect("No valid configuration path found.")
         .join("scripts/save_info.lua")
 });
 
@@ -60,7 +56,13 @@ impl Backend {
 
     fn load_titles() -> Result<Vec<Title>> {
         let cfg: Config = confy::load("yama", "config")?;
-        let mut series: Vec<Title> = Self::get_files(&cfg.series_path)?
+
+        if cfg.series_path.is_none() {
+            warn!("No series path found.");
+            bail!("No Titles found.");
+        }
+
+        let mut series: Vec<Title> = Self::get_files(&cfg.series_path.unwrap())?
             .filter(|x| match fs::metadata(x) {
                 Ok(f) => f.is_dir(),
                 Err(_) => false,
@@ -100,26 +102,20 @@ impl Backend {
 
     /// **[`Backend`][Backend] util:** Runs a secondary process given by a command.
     /// (Windows and Linux compatibility only!)
-    pub fn run_process(cmd: &str) -> Result<Output> {
+    pub fn run_process(cmd: &str) -> Result<()> {
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
-
-            //const CREATE_NO_WINDOW: u32 = 0x08000000;
-            const DETACHED_PROCESS: u32 = 0x00000008;
-
             let mut cmd = cmd.split(',');
             let output = Command::new(cmd.next().unwrap())
                 .current_dir(env::current_dir()?)
                 .args(cmd)
-                .creation_flags(DETACHED_PROCESS)
                 .output()?;
 
             if !output.status.success() {
                 bail!("Command failed: {}", String::from_utf8(output.stdout)?);
             }
 
-            Ok(output)
+            Ok(())
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -133,24 +129,24 @@ impl Backend {
                 bail!("Command failed: {}", String::from_utf8(output.stdout)?);
             }
 
-            Ok(output)
+            Ok(())
         }
     }
 
     /// **[`Backend`][Backend] util:** Runs an instance of mpv with the given command.
     /// The [`Episode`][crate::Episode] and it's starting time should be passes as a command.
-    pub fn run_mpv(command: &str) -> Result<Output> {
+    pub fn run_mpv(command: &str) -> Result<()> {
         let cfg: Config = confy::load("yama", "config")?;
 
         let cmd = if cfg!(target_os = "windows") {
             format!(
-                "mpv,--script={},{},{command}",
+                "mpv,--script={},--script-opts=save_info-min_time={},{command}",
                 SCRIPT_PATH.display(),
                 cfg.min_time
             )
         } else {
             format!(
-                "mpv --script={}  --script-opts=save_info-min_time={} {command}",
+                "mpv --script={} --script-opts=save_info-min_time={} {command}",
                 SCRIPT_PATH.display(),
                 cfg.min_time
             )

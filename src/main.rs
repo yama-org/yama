@@ -1,48 +1,25 @@
-#![windows_subsystem = "windows"]
-
 use frontend::{Frontend, Result};
 use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use tracing::info;
-
-#[cfg(target_os = "windows")]
-use windows::{
-    core::PCWSTR,
-    Win32::{
-        System::LibraryLoader::GetModuleHandleW,
-        UI::WindowsAndMessaging::{LoadImageW, IMAGE_ICON, LR_DEFAULTSIZE},
-    },
-};
 
 static SAVEINFO_LUA: &[u8] = include_bytes!("../scripts/save_info.lua");
 static DEFAULT_THEME: &[u8] = include_bytes!("../res/iced.json");
 
 static CFG_PATH: Lazy<PathBuf> = Lazy::new(|| {
     confy::get_configuration_file_path("yama", "config")
-        .expect("[ERROR] - No configuration path found.")
+        .expect("No configuration path found.")
         .parent()
-        .expect("[ERROR] - No valid configuration path found.")
+        .expect("No valid configuration path found.")
         .to_path_buf()
 });
 
 pub fn main() -> Result<()> {
     #[cfg(target_os = "windows")]
-    let _icon = unsafe {
-        LoadImageW(
-            GetModuleHandleW(None).expect("[ERROR] - Windows icon"),
-            PCWSTR(1 as _), // Value must match the `nameID` in the .rc script
-            IMAGE_ICON,
-            0,
-            0,
-            LR_DEFAULTSIZE,
-        )
-    }
-    .expect("[ERROR] - Windows icon");
+    windows_setup()?;
 
     setup_logger();
-
-    info!("\n{:-^1$}", " yama ", 80);
-    info!("Starting up yama...");
+    info!("Starting up...\n{:-^1$}", " yama ", 80);
 
     let config = confy::load("yama", "config")?;
 
@@ -82,4 +59,34 @@ fn setup_logger() {
         .with_timer(timer)
         .with_writer(file_appender)
         .init();
+}
+
+#[cfg(target_os = "windows")]
+fn windows_setup() -> Result<()> {
+    use windows::{
+        core::PCWSTR,
+        Win32::{
+            System::Console::{AttachConsole, FreeConsole, ATTACH_PARENT_PROCESS},
+            System::LibraryLoader::GetModuleHandleW,
+            UI::WindowsAndMessaging::{LoadImageW, IMAGE_ICON, LR_DEFAULTSIZE},
+        },
+    };
+
+    unsafe {
+        FreeConsole();
+        AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+
+    let _icon = unsafe {
+        LoadImageW(
+            GetModuleHandleW(None)?,
+            PCWSTR(1 as _), // Value must match the `nameID` in the .rc script
+            IMAGE_ICON,
+            0,
+            0,
+            LR_DEFAULTSIZE,
+        )
+    }?;
+
+    Ok(())
 }

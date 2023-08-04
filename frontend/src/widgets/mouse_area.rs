@@ -1,20 +1,21 @@
 //! A container for capturing mouse events.
 
-use iced_native::event::{self, Event};
-use iced_native::layout;
-use iced_native::mouse;
-use iced_native::overlay;
-use iced_native::renderer;
-use iced_native::touch;
-use iced_native::widget::{tree, Operation, Tree};
-use iced_native::{Clipboard, Element, Layout, Length, Point, Rectangle, Shell, Widget};
+use iced::advanced::layout;
+use iced::advanced::mouse;
+use iced::advanced::overlay;
+use iced::advanced::renderer;
+use iced::advanced::widget::{tree, Operation, Tree};
+use iced::advanced::{Clipboard, Layout, Shell, Widget};
+use iced::event::{self, Event};
+use iced::touch;
+use iced::{Element, Length, Rectangle};
 
 /// A container intercepting mouse events.
 pub fn mouse_area<'a, Message, Renderer>(
     widget: impl Into<Element<'a, Message, Renderer>>,
 ) -> MouseArea<'a, Message, Renderer>
 where
-    Renderer: iced_native::Renderer,
+    Renderer: iced::advanced::Renderer,
 {
     MouseArea::new(widget)
 }
@@ -108,7 +109,7 @@ impl<'a, Message, Renderer> MouseArea<'a, Message, Renderer> {
 
 impl<'a, Message, Renderer> Widget<Message, Renderer> for MouseArea<'a, Message, Renderer>
 where
-    Renderer: iced_native::Renderer,
+    Renderer: iced::advanced::Renderer,
     Message: Clone,
 {
     fn tag(&self) -> tree::Tag {
@@ -156,19 +157,21 @@ where
         tree: &mut Tree,
         event: Event,
         layout: Layout<'_>,
-        cursor_position: Point,
+        cursor: mouse::Cursor,
         renderer: &Renderer,
         clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
     ) -> event::Status {
         if let event::Status::Captured = self.content.as_widget_mut().on_event(
             &mut tree.children[0],
             event.clone(),
             layout,
-            cursor_position,
+            cursor,
             renderer,
             clipboard,
             shell,
+            viewport,
         ) {
             return event::Status::Captured;
         }
@@ -177,7 +180,7 @@ where
             self,
             &event,
             layout,
-            cursor_position,
+            cursor,
             shell,
             tree.state.downcast_mut::<State>(),
         )
@@ -187,14 +190,14 @@ where
         &self,
         tree: &Tree,
         layout: Layout<'_>,
-        cursor_position: Point,
+        cursor: mouse::Cursor,
         viewport: &Rectangle,
         renderer: &Renderer,
     ) -> mouse::Interaction {
         self.content.as_widget().mouse_interaction(
             &tree.children[0],
             layout,
-            cursor_position,
+            cursor,
             viewport,
             renderer,
         )
@@ -207,7 +210,7 @@ where
         theme: &Renderer::Theme,
         renderer_style: &renderer::Style,
         layout: Layout<'_>,
-        cursor_position: Point,
+        cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
         self.content.as_widget().draw(
@@ -216,7 +219,7 @@ where
             theme,
             renderer_style,
             layout,
-            cursor_position,
+            cursor,
             viewport,
         );
     }
@@ -237,7 +240,7 @@ impl<'a, Message, Renderer> From<MouseArea<'a, Message, Renderer>>
     for Element<'a, Message, Renderer>
 where
     Message: 'a + Clone,
-    Renderer: 'a + iced_native::Renderer,
+    Renderer: 'a + iced::advanced::Renderer,
 {
     fn from(area: MouseArea<'a, Message, Renderer>) -> Element<'a, Message, Renderer> {
         Element::new(area)
@@ -250,11 +253,11 @@ fn update<Message: Clone, Renderer>(
     widget: &mut MouseArea<'_, Message, Renderer>,
     event: &Event,
     layout: Layout<'_>,
-    cursor_position: Point,
+    cursor: mouse::Cursor,
     shell: &mut Shell<'_, Message>,
     state: &mut State,
 ) -> event::Status {
-    if !layout.bounds().contains(cursor_position) {
+    if !cursor.is_over(layout.bounds()) {
         state.mouse_entered = false;
         return event::Status::Ignored;
     }

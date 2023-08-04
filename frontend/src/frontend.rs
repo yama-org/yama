@@ -7,13 +7,13 @@ use crate::{keybindings, Result};
 use backend::Config;
 use bridge::{BackendMessage, ConfigChange, FrontendMessage as Message, Modals, PanelAction};
 
+use iced::futures::channel::mpsc::Sender;
 use iced::widget::{
     button, canvas, column, container, horizontal_space, pane_grid::Direction, row, text,
 };
-use iced::{alignment, executor, keyboard, mouse, window};
+use iced::{alignment, executor, font, keyboard, mouse, window, Font};
 use iced::{event, subscription, Event};
 use iced::{Application, Command, Length, Settings, Subscription};
-use iced_native::futures::channel::mpsc::Sender;
 use tracing::{error, info};
 
 #[derive(Debug)]
@@ -47,7 +47,7 @@ impl Frontend {
                 )?),
                 ..window::Settings::default()
             },
-            default_font: Some(crate::embedded::REGULAR_FONT_BYTES),
+            default_font: Font::with_name("Kumbh Sans"),
             ..Settings::default()
         })?)
     }
@@ -68,7 +68,11 @@ impl Application for Frontend {
                 loading: LoadingCircle::new(),
                 sender: None,
             },
-            Command::none(),
+            Command::batch(vec![
+                font::load(crate::embedded::REGULAR_FONT_BYTES).map(Message::FontLoaded),
+                font::load(crate::embedded::BOLD_FONT_BYTES).map(Message::FontLoaded),
+                font::load(iced_aw::graphics::icons::ICON_FONT_BYTES).map(Message::FontLoaded),
+            ]),
         )
     }
 
@@ -141,6 +145,11 @@ impl Application for Frontend {
                             GUIConfig::change_min_time(&mut self.cfg, new_time)
                         }
                     },
+                    Message::CleanUp => {
+                        if let Some(sender) = &mut self.sender {
+                            let _ = sender.try_send(BackendMessage::CleanUp);
+                        }
+                    }
                     Message::Exit => {
                         info!("Bye-bye~");
                         return window::close::<Message>();

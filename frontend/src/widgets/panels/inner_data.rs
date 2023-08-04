@@ -7,7 +7,7 @@ use bridge::{
     FrontendMessage,
 };
 
-use iced_native::widget::pane_grid::Direction;
+use iced::widget::pane_grid::Direction;
 use std::sync::Arc;
 
 /// The [`FocusedElement`] type.

@@ -1,10 +1,10 @@
 use backend::Config;
 
+use iced::theme::TextInput;
 use iced::widget::{button, container, pane_grid, scrollable, text};
 use iced::widget::{svg, text_input};
 use iced::{application, color, Color};
 use iced_aw::style::{number_input, NumberInputStyles};
-use iced_native::theme::TextInput;
 use serde::{Deserialize, Serialize};
 
 // Always import widget types from this module since it
@@ -106,7 +106,7 @@ impl text_input::StyleSheet for Theme {
         text_input::Appearance {
             background: self.background.into(),
             border_color: self.unfocus,
-            border_radius: 2.0,
+            border_radius: 2.0.into(),
             border_width: 2.0,
             icon_color: self.unfocus,
         }
@@ -117,7 +117,7 @@ impl text_input::StyleSheet for Theme {
         text_input::Appearance {
             background: self.background.into(),
             border_color: self.focus,
-            border_radius: 2.0,
+            border_radius: 2.0.into(),
             border_width: 2.0,
             icon_color: self.focus,
         }
@@ -128,7 +128,7 @@ impl text_input::StyleSheet for Theme {
         text_input::Appearance {
             background: self.background.into(),
             border_color: self.watched,
-            border_radius: 2.0,
+            border_radius: 2.0.into(),
             border_width: 2.0,
             icon_color: self.watched,
         }
@@ -205,27 +205,27 @@ impl container::StyleSheet for Theme {
         match style {
             Container::Default | Container::TitleBar => container::Appearance::default(),
             Container::Unfocused => container::Appearance {
-                border_radius: 5.0,
+                border_radius: 5.0.into(),
                 border_width: 2.0,
                 border_color: self.unfocus,
                 ..Default::default()
             },
             Container::Focused => container::Appearance {
                 border_color: self.focus,
-                border_radius: 5.0,
+                border_radius: 5.0.into(),
                 border_width: 2.0,
                 ..Default::default()
             },
             Container::Box => container::Appearance {
-                background: self.background.into(),
-                border_radius: 5.0,
+                background: Some(self.background.into()),
+                border_radius: 5.0.into(),
                 border_width: 5.0,
                 border_color: self.focus,
                 ..Default::default()
             },
             Container::Tooltip => container::Appearance {
-                background: self.background.into(),
-                border_radius: 5.0,
+                background: Some(self.background.into()),
+                border_radius: 5.0.into(),
                 border_width: 2.0,
                 border_color: self.focus,
                 ..Default::default()
@@ -249,13 +249,13 @@ impl button::StyleSheet for Theme {
     fn active(&self, style: &Self::Style) -> button::Appearance {
         match style {
             Button::Focused => button::Appearance {
-                background: self.focus.inverse().into(),
-                border_radius: 5.0,
+                background: Some(self.focus.inverse().into()),
+                border_radius: 5.0.into(),
                 ..Default::default()
             },
             Button::Input => button::Appearance {
-                background: self.background.into(),
-                border_radius: 2.0,
+                background: Some(self.background.into()),
+                border_radius: 2.0.into(),
                 border_width: 2.0,
                 border_color: self.unfocus,
                 ..Default::default()
@@ -275,7 +275,7 @@ impl button::StyleSheet for Theme {
             Button::Focused => button::Appearance { ..active },
             Button::Default => button::Appearance::default(),
             Button::Menu => button::Appearance {
-                background: self.unfocus.into(),
+                background: Some(self.unfocus.into()),
                 text_color: self.focus,
                 ..active
             },
@@ -295,13 +295,13 @@ impl scrollable::StyleSheet for Theme {
     fn active(&self, style: &Self::Style) -> scrollable::Scrollbar {
         match style {
             Scrollable::Primary => scrollable::Scrollbar {
-                background: Color::TRANSPARENT.into(),
-                border_radius: 4.0,
+                background: Some(Color::TRANSPARENT.into()),
+                border_radius: 4.0.into(),
                 border_width: 1.0,
                 border_color: Color::TRANSPARENT,
                 scroller: scrollable::Scroller {
                     color: self.unfocus,
-                    border_radius: 4.0,
+                    border_radius: 4.0.into(),
                     border_width: 1.0,
                     border_color: Color::TRANSPARENT,
                 },
@@ -312,8 +312,8 @@ impl scrollable::StyleSheet for Theme {
     fn hovered(&self, style: &Self::Style, is_mouse_over_scrollbar: bool) -> scrollable::Scrollbar {
         match style {
             Scrollable::Primary => scrollable::Scrollbar {
-                background: Color::TRANSPARENT.into(),
-                border_radius: 4.0,
+                background: Some(Color::TRANSPARENT.into()),
+                border_radius: 4.0.into(),
                 border_width: 1.0,
                 border_color: Color::TRANSPARENT,
                 scroller: scrollable::Scroller {
@@ -322,7 +322,7 @@ impl scrollable::StyleSheet for Theme {
                     } else {
                         self.unfocus
                     },
-                    border_radius: 4.0,
+                    border_radius: 4.0.into(),
                     border_width: 1.0,
                     border_color: Color::TRANSPARENT,
                 },
@@ -357,34 +357,15 @@ impl pane_grid::StyleSheet for Theme {
             }),
         }
     }
+
+    fn hovered_region(&self, style: &Self::Style) -> pane_grid::Appearance {
+        match style {
+            PaneGrid::Default => pane_grid::Appearance {
+                background: self.background.into(),
+                border_radius: 5.0.into(),
+                border_width: 2.0,
+                border_color: self.focus,
+            },
+        }
+    }
 }
-
-/*pub const BACKGROUND: Color = Color::from_rgb(
-    0x16 as f32 / 255.0,
-    0x1b as f32 / 255.0,
-    0x24 as f32 / 255.0,
-);
-
-pub const TEXT: Color = Color::from_rgb(
-    0xf3 as f32 / 255.0,
-    0xf3 as f32 / 255.0,
-    0xf3 as f32 / 255.0,
-);
-
-pub const FOCUS: Color = Color::from_rgb(
-    0x61 as f32 / 255.0,
-    0xa3 as f32 / 255.0,
-    0xff as f32 / 255.0,
-);
-
-pub const UNFOCUS: Color = Color::from_rgb(
-    0x1d as f32 / 255.0,
-    0x6a as f32 / 255.0,
-    0xd5 as f32 / 255.0,
-);
-
-pub const WATCHED: Color = Color::from_rgb(
-    0x27 as f32 / 255.0,
-    0x2d as f32 / 255.0,
-    0x3a as f32 / 255.0,
-);*/

@@ -13,7 +13,8 @@ pub static YAMA_ERR: &[u8] = include_bytes!("../../res/yama_error.png");
 
 // Fonts
 pub static REGULAR_FONT_BYTES: &[u8] = include_bytes!("../../res/fonts/KumbhSans-Regular.ttf");
-pub static BOLD_FONT: iced::Font = iced::Font::External {
+pub static BOLD_FONT_BYTES: &[u8] = include_bytes!("../../res/fonts/KumbhSans-SemiBold.ttf");
+/* pub static BOLD_FONT: iced::Font = iced::Font {
     name: "Kumbh Sans Bold",
     bytes: include_bytes!("../../res/fonts/KumbhSans-Bold.ttf"),
-};
+}; */

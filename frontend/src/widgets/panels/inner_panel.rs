@@ -5,8 +5,9 @@ use crate::widgets::Element;
 use backend::MetaType;
 use bridge::{cache::*, FrontendMessage};
 
+use iced::font::Family;
 use iced::widget::{column as col, container, image, scrollable, text};
-use iced::Length;
+use iced::{Font, Length};
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 
@@ -57,7 +58,11 @@ impl InnerPanel {
                 container(scrollable(
                     col![
                         thumbnail,
-                        text(meta.title.clone()).font(crate::embedded::BOLD_FONT),
+                        text(meta.title.clone()).font(Font {
+                            family: Family::Name("Kumbh Sans"),
+                            weight: iced::font::Weight::Semibold,
+                            ..Default::default()
+                        }),
                         text(meta.description.clone())
                     ]
                     .spacing(20),

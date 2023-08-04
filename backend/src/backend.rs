@@ -4,11 +4,13 @@ pub mod title;
 pub mod video_metadata;
 
 use crate::Config;
+use crate::Discord;
 use crate::Result;
 use crate::Title;
 
 use anyhow::bail;
 use core::fmt::Debug;
+use discord_sdk as ds;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 use std::{env, fs, path::PathBuf, process::Command};
@@ -27,6 +29,7 @@ static SCRIPT_PATH: Lazy<PathBuf> = Lazy::new(|| {
 /// _So, did you do some good deeds?_
 #[derive(Debug)]
 pub struct Backend {
+    pub ds_client: Option<Discord>,
     pub titles: Vec<Title>,
     /// Number of [`titles`][Title] this [`Backend`][Backend] has.
     pub count: usize,
@@ -41,6 +44,17 @@ impl Backend {
         let mut titles = Self::load_titles()?;
         Self::download_titles_data(titles.as_mut_slice()).await;
 
+        let ds_client = match Discord::new(ds::Subscriptions::ACTIVITY).await {
+            Ok(user) => {
+                user.idle_activity().await;
+                Some(user)
+            }
+            Err(e) => {
+                tracing::error!("Discord client failed to connect:\n{e}");
+                None
+            }
+        };
+
         Ok(Self {
             title_cache: titles
                 .iter()
@@ -51,6 +65,7 @@ impl Backend {
                 .collect(),
             count: titles.len(),
             titles,
+            ds_client,
         })
     }
 
@@ -205,6 +220,34 @@ impl Backend {
     /// Returns a copy of the [`Titles`][Title] names to be shared with the [frontend] thread.
     pub fn cache(&self) -> Arc<[Arc<str>]> {
         self.title_cache.clone()
+    }
+
+    /// Returns the name of the indexed [`Title`][Title].
+    /// ## Panics
+    /// May panic if `title_number` is out of bounds.
+    pub fn get_title_name(&self, title_number: usize) -> Arc<str> {
+        self.title_cache[title_number].clone()
+    }
+
+    /// Returns the data of the indexed [`Episode`][crate::Episode].
+    /// ## Panics
+    /// May panic if `title_number` or `episode_number` is out of bounds.
+    pub fn get_episode_data(
+        &self,
+        title_number: usize,
+        episode_number: usize,
+    ) -> Option<(Arc<str>, f64)> {
+        self.titles[title_number].episodes.as_ref().map(|episodes| {
+            let ep = &episodes[episode_number];
+            (
+                ep.name.clone(),
+                if ep.metadata.watched {
+                    ep.metadata.duration
+                } else {
+                    ep.metadata.remaining
+                },
+            )
+        })
     }
 
     /// Takes a closure, applies it to the [`Titles`][Title] vector

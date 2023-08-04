@@ -25,6 +25,7 @@ pub enum BackendMessage {
     /// Args: (Title index, Episode number)
     MarkPreviousEpisodes(TitleIndex, EpisodeNumber),
     Restart,
+    CleanUp,
 }
 
 /// Messages to be sended to the [Frontend] thread.
@@ -32,12 +33,14 @@ pub enum BackendMessage {
 pub enum FrontendMessage {
     Recovery(mpsc::Sender<BackendMessage>, Arc<str>),
     Ready(mpsc::Sender<BackendMessage>, Cache),
+    FontLoaded(Result<(), iced::font::Error>),
     UpdateConfig(ConfigChange),
     PaneAction(PanelAction),
     Loading(Instant),
     MenuBar(Modals),
     Error(Arc<str>),
     HideMenubar,
+    CleanUp,
     ToLoad,
     Exit,
 }

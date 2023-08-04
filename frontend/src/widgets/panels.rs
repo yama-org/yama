@@ -12,10 +12,11 @@ use crate::widgets::{theme, Element};
 use bridge::{cache::*, FrontendMessage};
 use bridge::{BackendMessage, PanelAction as Message};
 
+use iced::font::Family;
 use iced::futures::channel::mpsc::Sender;
 use iced::widget::pane_grid::{self, Direction, PaneGrid};
 use iced::widget::{button, row, scrollable, svg, text, tooltip};
-use iced::{Command, Length, Settings};
+use iced::{Command, Font, Length, Settings};
 use std::vec;
 
 #[derive(Debug)]
@@ -194,7 +195,11 @@ impl Panels {
                         let title_bar = pane_grid::TitleBar::new(
                             row![
                                 text("Titles")
-                                    .font(crate::embedded::BOLD_FONT)
+                                    .font(Font {
+                                        family: Family::Name("Kumbh Sans"),
+                                        weight: iced::font::Weight::Semibold,
+                                        ..Default::default()
+                                    })
                                     .size(26)
                                     .width(Length::Fill),
                                 button(
@@ -228,7 +233,11 @@ impl Panels {
                         let title_bar = pane_grid::TitleBar::new(
                             row![
                                 text("Episodes")
-                                    .font(crate::embedded::BOLD_FONT)
+                                    .font(Font {
+                                        family: Family::Name("Kumbh Sans"),
+                                        weight: iced::font::Weight::Semibold,
+                                        ..Default::default()
+                                    })
                                     .size(26)
                                     .width(Length::Fill),
                                 tooltip(

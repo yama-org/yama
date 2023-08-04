@@ -1,8 +1,9 @@
 use crate::widgets::theme::Theme;
 
+use iced::mouse::Cursor;
 use iced::widget::canvas::stroke::{self, Stroke};
-use iced::widget::canvas::{self, Cursor, Path};
-use iced::{Point, Rectangle, Vector};
+use iced::widget::canvas::{self, Path};
+use iced::{Point, Rectangle, Renderer, Vector};
 use std::time::Instant;
 
 #[derive(Debug)]
@@ -28,19 +29,20 @@ impl LoadingCircle {
     }
 }
 
-impl<Message> canvas::Program<Message, Theme> for LoadingCircle {
+impl<Message> canvas::Program<Message, Renderer<Theme>> for LoadingCircle {
     type State = ();
 
     fn draw(
         &self,
         _state: &Self::State,
+        renderer: &Renderer<Theme>,
         theme: &Theme,
         bounds: Rectangle,
         _cursor: Cursor,
     ) -> Vec<canvas::Geometry> {
         use std::f32::consts::PI;
 
-        let system = self.system_cache.draw(bounds.size(), |frame| {
+        let system = self.system_cache.draw(renderer, bounds.size(), |frame| {
             let center = frame.center();
             let radius = frame.width().min(frame.height()) / 5.0;
             let orbit = Path::circle(center, radius);

@@ -10,5 +10,6 @@ pub use backend::title::Title;
 pub use backend::video_metadata::VideoMetadata;
 pub use backend::Backend;
 pub use networking::anilist::Anilist;
+pub use networking::discord::{Discord, APP_ID};
 
 pub type Result<T> = anyhow::Result<T>;

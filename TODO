@@ -26,11 +26,11 @@
     [X] Custom themes
 
 - For 0.8.0:
+[X] Discord support
+[] Title Searcher
 [] Clear cache/logs option
 [?] More title information (voice actors, etc)
 [] Pop-up windows on first launch to ask for series directory
-[] Title Searcher
-[] Discord support
 
 - For 0.9.0:
 [] Title thumbnail button viewer

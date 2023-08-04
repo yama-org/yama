@@ -26,10 +26,9 @@ pub fn start() -> Subscription<FrontendMessage> {
                     use iced::futures::StreamExt;
                     let msg = receiver.select_next_some().await;
 
-                    if let BackendMessage::Restart = msg {
-                        (FrontendMessage::ToLoad, State::Starting)
-                    } else {
-                        panic!("");
+                    match msg {
+                        BackendMessage::Restart => (FrontendMessage::ToLoad, State::Starting),
+                        _ => unreachable!(),
                     }
                 }
                 State::Starting => {
@@ -88,32 +87,48 @@ pub fn start() -> Subscription<FrontendMessage> {
                             }
                         },
 
-                        BackendMessage::WatchEpisode(title_number, episode_number) => match backend
-                            .get_episode(title_number, episode_number)
-                        {
-                            Some(episode) => {
-                                info!("Loading episode: {}.", episode.name);
-
-                                match episode.run() {
-                                    Ok(_) => {
-                                        let episode_cache = EpisodeCache::new(episode);
-
-                                        FrontendMessage::PaneAction(PanelAction::UpdateEpisode(
-                                            title_number,
-                                            vec![episode_cache],
-                                        ))
-                                    }
-                                    Err(e) => {
-                                        error!("{}", e);
-                                        FrontendMessage::Error(Arc::from("Could not load episode!"))
-                                    }
+                        BackendMessage::WatchEpisode(title_number, episode_number) => {
+                            let title_name = backend.get_title_name(title_number);
+                            if let Some((episode_name, remaining_time)) =
+                                backend.get_episode_data(title_number, episode_number)
+                            {
+                                if let Some(ds_client) = &backend.ds_client {
+                                    ds_client
+                                        .watch_activity(title_name, episode_name, remaining_time)
+                                        .await;
                                 }
                             }
-                            None => {
-                                error!("No episode found at the index {}", episode_number);
-                                FrontendMessage::Error(Arc::from("No episode found!"))
+
+                            match backend.get_episode(title_number, episode_number) {
+                                Some(episode) => {
+                                    info!("Loading episode: {}.", episode.name);
+
+                                    match episode.run() {
+                                        Ok(_) => {
+                                            let episode_cache = EpisodeCache::new(episode);
+                                            if let Some(ds_client) = &backend.ds_client {
+                                                ds_client.idle_activity().await;
+                                            }
+
+                                            FrontendMessage::PaneAction(PanelAction::UpdateEpisode(
+                                                title_number,
+                                                vec![episode_cache],
+                                            ))
+                                        }
+                                        Err(e) => {
+                                            error!("{}", e);
+                                            FrontendMessage::Error(Arc::from(
+                                                "Could not load episode!",
+                                            ))
+                                        }
+                                    }
+                                }
+                                None => {
+                                    error!("No episode found at the index {}", episode_number);
+                                    FrontendMessage::Error(Arc::from("No episode found!"))
+                                }
                             }
-                        },
+                        }
 
                         BackendMessage::MarkEpisode(title_number, episode_number) => match backend
                             .get_episode(title_number, episode_number)
@@ -190,6 +205,17 @@ pub fn start() -> Subscription<FrontendMessage> {
 
                         BackendMessage::Restart => {
                             return (FrontendMessage::ToLoad, State::Starting);
+                        }
+
+                        BackendMessage::CleanUp => {
+                            if let Some(ds_client) = backend.ds_client {
+                                match ds_client.cleanup().await {
+                                    Ok(_) => info!("Discord client closed successfully"),
+                                    Err(e) => error!("Discord client failed to close:\n{e}"),
+                                }
+                            }
+
+                            return (FrontendMessage::Exit, State::Idle(receiver));
                         }
                     };
 

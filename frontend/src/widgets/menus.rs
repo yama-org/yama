@@ -7,7 +7,7 @@ use backend::Config;
 use bridge::{FrontendMessage as Message, Modals};
 
 use iced::widget::{button, column as col, container, image, scrollable, text};
-use iced_native::{alignment, Length};
+use iced::{alignment, Length};
 use std::sync::Arc;
 
 pub fn about<'a>() -> Element<'a, Message> {

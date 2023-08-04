@@ -1,7 +1,7 @@
 use bridge::{FrontendMessage as Message, PanelAction};
 
+use iced::widget::pane_grid::Direction;
 use iced::{keyboard, mouse};
-use iced_native::widget::pane_grid::Direction;
 
 pub fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
     use keyboard::KeyCode;
@@ -25,7 +25,7 @@ pub fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
         KeyCode::End => Some(Message::PaneAction(PanelAction::End)),
 
         // Messages
-        KeyCode::Q => Some(Message::Exit),
+        KeyCode::Q => Some(Message::CleanUp),
         _ => None,
     }
 }

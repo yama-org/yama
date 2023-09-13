@@ -24,10 +24,12 @@ impl Discord {
         let ds = ds::Discord::new(ds::DiscordApp::PlainId(APP_ID), subs, Box::new(handler))?;
 
         info!("Waiting for handshake...");
-        user.0
-            .changed()
-            .await
-            .map_err(|_| ds::Error::NoConnection)?;
+        if let Err(e) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), user.0.changed()).await
+        {
+            error!("Could no connect to discord: {e}");
+            bail!(ds::Error::NoConnection)
+        }
 
         let user = match &*user.0.borrow() {
             ds::wheel::UserState::Connected(user) => user.clone(),

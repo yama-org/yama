@@ -83,17 +83,24 @@ impl svg::StyleSheet for Theme {
 impl iced_aw::number_input::StyleSheet for Theme {
     type Style = NumberInputStyles;
 
-    fn active(&self, _style: Self::Style) -> number_input::Appearance {
+    fn active(&self, _style: &Self::Style) -> number_input::Appearance {
         number_input::Appearance {
             button_background: None,
             icon_color: self.unfocus,
         }
     }
 
-    fn pressed(&self, _style: Self::Style) -> number_input::Appearance {
+    fn pressed(&self, _style: &Self::Style) -> number_input::Appearance {
         number_input::Appearance {
             button_background: None,
             icon_color: self.focus,
+        }
+    }
+
+    fn disabled(&self, _style: &Self::Style) -> number_input::Appearance {
+        number_input::Appearance {
+            button_background: None,
+            icon_color: self.watched,
         }
     }
 }

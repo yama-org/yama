@@ -50,7 +50,7 @@ impl Backend {
                 Some(user)
             }
             Err(e) => {
-                tracing::error!("Discord client failed to connect:\n{e}");
+                tracing::error!("Discord client failed to connect: {e}");
                 None
             }
         };
@@ -241,7 +241,7 @@ impl Backend {
             let ep = &episodes[episode_number];
             (
                 ep.name.clone(),
-                if ep.metadata.watched {
+                if ep.metadata.watched || ep.metadata.remaining == 0.00 {
                     ep.metadata.duration
                 } else {
                     ep.metadata.remaining

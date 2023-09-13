@@ -11,12 +11,12 @@ backend = { path = "../backend" }
 bridge = { path = "../bridge" }
 confy = { workspace = true }
 iced = { workspace = true }
-iced_aw = { version = "0.6", default-features = false, features = [
+iced_aw = { version = "0.7", default-features = false, features = [
     "number_input",
     "icon_text"
 ] }
 once_cell = { workspace = true }
-rfd = "0.11"
+rfd = "0.12"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

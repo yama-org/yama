@@ -35,7 +35,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "time"] }
 
 [target.'cfg(windows)'.dependencies.windows]
-version = "0.48"
+version = "0.51"
 features = [
     "Win32_Foundation",
     "Win32_System_Console",

@@ -18,6 +18,6 @@ iced = { workspace = true }
 once_cell = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { version = "1", features = ["fs", "io-util", "macros"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "time"] }
 tokio-stream = "0.1.14"
 tracing = { workspace = true }

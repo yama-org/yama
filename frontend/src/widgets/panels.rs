@@ -16,7 +16,7 @@ use iced::font::Family;
 use iced::futures::channel::mpsc::Sender;
 use iced::widget::pane_grid::{self, Direction, PaneGrid};
 use iced::widget::{button, row, scrollable, svg, text, tooltip};
-use iced::{Command, Font, Length, Settings};
+use iced::{Command, Font, Length};
 use std::vec;
 
 #[derive(Debug)]
@@ -46,13 +46,7 @@ impl Panels {
         }
     }
 
-    fn next(&mut self, mut y: f32) -> Command<FrontendMessage> {
-        //Fixes top items being cut-out
-        if y > 0.1 {
-            //Fixes bottom items being cut-out
-            y += 1.0 / Settings::<()>::default().default_text_size;
-        }
-
+    fn next(&mut self, y: f32) -> Command<FrontendMessage> {
         let metadata = self.data.get_metacache();
 
         if let Some(adj) = self.panes.adjacent(&self.focus, Direction::Right) {
@@ -86,8 +80,12 @@ impl Panels {
             }
 
             Message::JumpTo(to) => {
-                let y = self.data.jump_to(to);
-                return self.next(y);
+                let _ = self.data.jump_to(to);
+                let metadata = self.data.get_metacache();
+
+                if let Some(adj) = self.panes.adjacent(&self.focus, Direction::Right) {
+                    *self.panes.get_mut(&adj).unwrap() = InnerPanel::Metadata(metadata);
+                }
             }
 
             Message::Plus(to_add) => {

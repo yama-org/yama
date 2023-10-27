@@ -34,7 +34,8 @@ impl Pointer {
                 Direction::Down => self.decrement(),
                 _ => (),
             }
-            (1.0 / self.size as f32) * self.focused as f32
+
+            (1.0 / (self.size - 1) as f32) * self.focused as f32
         } else {
             0.0
         }
@@ -64,12 +65,12 @@ impl Pointer {
 
     pub fn start(&mut self) -> f32 {
         self.focused = 0;
-        (1.0 / self.size as f32) * self.focused as f32
+        0.0
     }
 
     pub fn end(&mut self) -> f32 {
         self.focused = self.size - 1;
-        (1.0 / self.size as f32) * self.focused as f32
+        1.0
     }
 
     fn increment(&mut self) {

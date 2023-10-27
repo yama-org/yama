@@ -25,7 +25,7 @@ impl Discord {
 
         info!("Waiting for handshake...");
         if let Err(e) =
-            tokio::time::timeout(std::time::Duration::from_secs(5), user.0.changed()).await
+            tokio::time::timeout(std::time::Duration::from_secs(3), user.0.changed()).await
         {
             error!("Could no connect to discord: {e}");
             bail!(ds::Error::NoConnection)
